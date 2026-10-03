@@ -7,7 +7,6 @@ import type {
   CameraLinkStatus,
   CaptureMode,
   DeviceRole,
-  Direction,
   IncidentType,
   LateralCode,
   PassStatus,
@@ -106,6 +105,16 @@ export const S = {
       CONTROLADOR: 'Crea la sesión, ordena las capturas y recibe las fotos.',
       CAMERA_1: 'Toma las fotos del lado izquierdo del soporte.',
       CAMERA_2: 'Toma las fotos del lado derecho del soporte.',
+    } as Record<DeviceRole, string>,
+    // Elección después del login (ADR 0005)
+    prompt: '¿Qué función cumplirá este celular?',
+    current: 'Actual',
+    locked: 'Bloqueada',
+    choose: 'Elige una función',
+    needs: {
+      CONTROLADOR: 'Necesita: ubicación y Wi-Fi',
+      CAMERA_1: 'Necesita: cámara y Wi-Fi',
+      CAMERA_2: 'Necesita: cámara y Wi-Fi',
     } as Record<DeviceRole, string>,
   },
   permissions: {
@@ -225,7 +234,6 @@ export const S = {
     lot: 'Lote',
     row: 'Hilera',
     lateral: 'Lateral',
-    direction: 'Dirección',
     segment: 'Segmento',
     marker: 'Marcador de inicio',
     start: 'Iniciar pasada',
@@ -322,6 +330,8 @@ export const S = {
     scanTitle: 'Escanear QR',
     scanHint: 'Apunta al QR del controlador',
     retry: 'Reintentar',
+    wifi: 'Wi-Fi',
+    noWifi: 'Sin Wi-Fi',
     testMode: 'Modo prueba',
     liveTitle: 'Cámara en sesión',
     capturing: 'CAPTURANDO',
@@ -384,8 +394,6 @@ export const ROLE_LABEL: Record<DeviceRole, string> = {
 export const MODE_LABEL: Record<CaptureMode, string> = { MANUAL: 'MANUAL', AUTOMATICO: 'AUTOMÁTICO' };
 
 export const LATERAL_LABEL: Record<LateralCode, string> = { LATERAL_A: 'Lateral A', LATERAL_B: 'Lateral B' };
-
-export const DIRECTION_LABEL: Record<Direction, string> = { ASCENDENTE: 'Ascendente', DESCENDENTE: 'Descendente' };
 
 export const LINK_LABEL: Record<CameraLinkStatus, string> = {
   DESCONECTADA: 'DESCONECTADA',

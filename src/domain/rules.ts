@@ -3,7 +3,16 @@
 // QUÉ HACE: cada función recibe datos ya leídos (no toca SQLite ni la red) y devuelve una decisión.
 // Así se prueban con Jest (__tests__/rules.test.ts) y los servicios las reutilizan sin duplicar lógica.
 
-import type { CameraLinkStatus, CameraRole, CaptureMode, LateralCode, MonitoringPass, PassStatus, SessionStatus } from './types';
+import type {
+  CameraLinkStatus,
+  CameraRole,
+  CaptureMode,
+  DeviceRole,
+  LateralCode,
+  MonitoringPass,
+  PassStatus,
+  SessionStatus,
+} from './types';
 
 export type RuleResult = { ok: true } | { ok: false; code: string };
 
@@ -121,6 +130,55 @@ export function isRowCovered(passesOfRow: Pick<MonitoringPass, 'lateralCode' | '
 export function canChangeDeviceRole(hasOpenSession: boolean, pendingTransfers: number, pendingSync: number): RuleResult {
   if (hasOpenSession || pendingTransfers > 0 || pendingSync > 0) return fail('CAMBIO_FUNCION_BLOQUEADO');
   return OK;
+}
+
+/** Aviso que PANT-08 confirma antes de cambiar la función (no bloquea). */
+export type RoleChangeWarning = 'SINCRONIZACION_PENDIENTE';
+
+export type RoleChangeBlockCode =
+  | 'CAMBIO_FUNCION_SESION_ABIERTA'
+  | 'CAMBIO_FUNCION_FOTOS_PENDIENTES'
+  | 'CAMBIO_FUNCION_BLOQUEADO';
+
+export type RoleChangeDecision =
+  | { kind: 'SAME' }
+  | { kind: 'ALLOWED'; warnings: RoleChangeWarning[] }
+  | { kind: 'BLOCKED'; code: RoleChangeBlockCode };
+
+export interface RoleChangeInput {
+  /** Función guardada en el celular (null = todavía no eligió ninguna). */
+  current: DeviceRole | null;
+  /** Función que el operador eligió en PANT-08. */
+  target: DeviceRole;
+  /** 7.12 según la función actual. */
+  hasOpenSession: boolean;
+  /** Cámara: fotos que aún no llegan al controlador. */
+  pendingTransfers: number;
+  /** Controlador: elementos de sync_queue sin confirmar por el backend. */
+  pendingSync: number;
+  /** false mientras la sincronización con el backend no exista (Fase 4): la cola no se puede vaciar. */
+  syncAvailable: boolean;
+}
+
+/**
+ * RN-15 en PANT-08 (ADR 0005). Decide qué pasa cuando el operador elige `target` después del login
+ * o desde Ajustes:
+ *  - SAME: es la función actual; siempre se puede continuar con ella (incluso con una sesión abierta).
+ *  - BLOCKED: hay una sesión de monitoreo abierta o fotos por enviar al controlador (RN-15).
+ *  - ALLOWED: se puede cambiar. Con la cola hacia el backend pendiente y SIN sincronización disponible se
+ *    avisa (SINCRONIZACION_PENDIENTE): esos datos se conservan en SQLite y no se pierden al cambiar.
+ * Cuando la sincronización exista (syncAvailable = true) la cola pendiente vuelve a bloquear, como dice RN-15.
+ */
+export function decideRoleChange(i: RoleChangeInput): RoleChangeDecision {
+  if (i.current === i.target) return { kind: 'SAME' };
+  if (i.current === null) return { kind: 'ALLOWED', warnings: [] };
+  if (i.hasOpenSession) return { kind: 'BLOCKED', code: 'CAMBIO_FUNCION_SESION_ABIERTA' };
+  if (i.pendingTransfers > 0) return { kind: 'BLOCKED', code: 'CAMBIO_FUNCION_FOTOS_PENDIENTES' };
+  if (i.pendingSync > 0) {
+    if (i.syncAvailable) return { kind: 'BLOCKED', code: 'CAMBIO_FUNCION_BLOQUEADO' };
+    return { kind: 'ALLOWED', warnings: ['SINCRONIZACION_PENDIENTE'] };
+  }
+  return { kind: 'ALLOWED', warnings: [] };
 }
 
 /** RN-19 — No se cierra la sesión de usuario con una sesión de monitoreo abierta. */

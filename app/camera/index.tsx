@@ -4,6 +4,9 @@
 // (type = RIACHUELO_PAIR) se vincula con el controlador usando la función de este celular (Cámara 1 o 2).
 // Si ya está unido a OTRA sesión, pide confirmación antes de cerrarla (8.12). Un QR que no es de la app
 // muestra QR_INVALIDO. Acceso a "Modo prueba" (PANT-32) y a las fotos guardadas.
+// ADR 0005: es la pantalla principal de Cámara 1 / Cámara 2 al entrar después del login. Muestra también el
+// estado del celular antes de vincularse (batería, espacio y Wi-Fi con su IP, maestro §8.2) y "Reintentar"
+// para reiniciar el lector si la vista de cámara se quedó congelada.
 // Funciona en Expo Go (cámara + WebSocket) para vincularse con un controlador instalado como APK.
 
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -15,7 +18,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppSession } from '../../src/auth/authStore';
 import { cameraAgent } from '../../src/camera/cameraAgent';
 import { useCameraLive } from '../../src/camera/cameraStore';
+import { CONFIG } from '../../src/config';
 import type { CameraRole } from '../../src/domain/types';
+import { localIp } from '../../src/device/networkMonitor';
 import { parsePairingQr } from '../../src/protocol/envelope';
 import { AppButton } from '../../src/ui/components/AppButton';
 import { AppHeader } from '../../src/ui/components/AppHeader';
@@ -25,7 +30,7 @@ import { ScanFrame } from '../../src/ui/components/ScanFrame';
 import { StatusPill } from '../../src/ui/components/StatusPill';
 import { feedback } from '../../src/ui/feedback';
 import { messageFor } from '../../src/ui/messages';
-import { ROLE_LABEL, S } from '../../src/ui/strings';
+import { formatBytes, formatPct, ROLE_LABEL, S } from '../../src/ui/strings';
 import { colors, font, radius } from '../../src/ui/theme';
 import { showToast } from '../../src/ui/toast';
 
@@ -36,16 +41,33 @@ export default function ScanScreen() {
   const live = useCameraLive();
   const [permission, requestPermission] = useCameraPermissions();
   const [active, setActive] = useState(true);
+  const [scanKey, setScanKey] = useState(0);
+  const [ip, setIp] = useState<string | null>(null);
   const handling = useRef(false);
   const lastInvalid = useRef(0);
 
   useFocusEffect(
     useCallback(() => {
+      let alive = true;
       handling.current = false;
       setActive(true);
-      return () => setActive(false);
+      // IP del Wi-Fi: la cámara y el controlador deben estar en la misma red (o el hotspot del controlador).
+      void localIp().then((v) => alive && setIp(v));
+      return () => {
+        alive = false;
+        setActive(false);
+      };
     }, []),
   );
+
+  /** "Reintentar" (PANT-30): vuelve a montar la vista de cámara y habilita otra lectura. */
+  const retry = () => {
+    handling.current = false;
+    setScanKey((k) => k + 1);
+  };
+
+  const lowBattery = live.battery !== null && live.battery < CONFIG.device.minBatteryToStartPct;
+  const lowSpace = live.freeSpace !== null && live.freeSpace < CONFIG.device.minFreeSpaceToStartBytes;
 
   const onScan = async (data: string) => {
     if (handling.current) return;
@@ -78,6 +100,7 @@ export default function ScanScreen() {
       <View style={styles.flex}>
         {granted ? (
           <CameraView
+            key={scanKey}
             style={StyleSheet.absoluteFill}
             facing="back"
             active={active}
@@ -96,6 +119,7 @@ export default function ScanScreen() {
             <View style={styles.center}>
               <ScanFrame />
               <Text style={styles.hint}>{S.camera.scanHint}</Text>
+              <AppButton title={S.camera.retry} variant="dark" compact onPress={retry} />
             </View>
           ) : (
             <View style={styles.center}>
@@ -104,6 +128,22 @@ export default function ScanScreen() {
             </View>
           )}
           <View style={[styles.bottom, { paddingBottom: insets.bottom + 14 }]}>
+            <View style={styles.status}>
+              <View style={styles.statusItem}>
+                <Text style={styles.k}>{S.settings.battery}</Text>
+                <Text style={[styles.v, lowBattery && styles.vWarn]}>{formatPct(live.battery)}</Text>
+              </View>
+              <View style={styles.statusItem}>
+                <Text style={styles.k}>{S.settings.freeSpace}</Text>
+                <Text style={[styles.v, lowSpace && styles.vWarn]}>{formatBytes(live.freeSpace)}</Text>
+              </View>
+              <View style={styles.statusItem}>
+                <Text style={styles.k}>{S.camera.wifi}</Text>
+                <Text style={[styles.v, !ip && styles.vWarn]} numberOfLines={1} adjustsFontSizeToFit>
+                  {ip ?? S.camera.noWifi}
+                </Text>
+              </View>
+            </View>
             {live.sessionId ? (
               <AppButton title={S.camera.liveTitle} variant="gold" onPress={() => router.replace('/camera/live')} />
             ) : null}
@@ -145,4 +185,16 @@ const styles = StyleSheet.create({
   },
   bottom: { paddingHorizontal: 16, gap: 10 },
   row: { flexDirection: 'row', gap: 10 },
+  status: {
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: 'rgba(8,24,16,0.78)',
+    borderRadius: radius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  statusItem: { flex: 1 },
+  k: { color: '#B9D3C0', fontSize: 14 },
+  v: { color: '#fff', fontSize: 18, fontWeight: font.weightBold },
+  vWarn: { color: colors.goldLight },
 });

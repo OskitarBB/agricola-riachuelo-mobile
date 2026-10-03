@@ -5,6 +5,8 @@
 //  - login(): intenta con internet; si NO hay respuesta del servidor, intenta automáticamente sin internet.
 //  - Con internet OK: guarda tokens (SecureStore), usuario (users_cache) y crea el verificador PBKDF2
 //    para entrar sin internet hasta 7 días (salvo contraseña temporal: RN-04).
+//  - Todo login correcto desde PANT-02 (con o sin internet) marca roleChoicePending: la app pasa por PANT-08
+//    para elegir la función del celular (ADR 0005). restoreSession() y reauthenticate() no la marcan.
 //  - restoreSession(): al abrir la app decide AUTENTICADO (ONLINE/OFFLINE) o SIN_SESION (tabla de 7.11).
 //  - getAccessToken(): renueva el token si vence pronto (refreshMarginSeconds); ante REFRESH_INVALID,
 //    ACCOUNT_BLOCKED, DEVICE_REVOKED o ROLE_NOT_ALLOWED aplica la revocación (borra tokens y verificador,
@@ -60,7 +62,17 @@ export type PhaseListener = (phase: 'CONNECTING' | 'PREPARING_OFFLINE' | 'CHECKI
 
 // ------------------------------------------------------------------ login con internet (7.4)
 
-async function applyOnlineLogin(res: LoginResponse, password: string, onPhase?: PhaseListener): Promise<AuthResult> {
+/**
+ * `askRole` (ADR 0005): true en un inicio de sesión desde PANT-02 → la app pasa por PANT-08 para elegir la
+ * función. false en la revalidación sin salir de la pantalla (reauthenticate): no cambia la navegación.
+ */
+async function applyOnlineLogin(
+  res: LoginResponse,
+  password: string,
+  onPhase?: PhaseListener,
+  askRole = true,
+): Promise<AuthResult> {
+  const roleChoice = askRole ? { roleChoicePending: true } : {};
   const now = nowIso();
   await saveTokens(res, res.user.id);
   await upsertUser(res.user, now);
@@ -79,6 +91,7 @@ async function applyOnlineLogin(res: LoginResponse, password: string, onPhase?: 
       offlineValidUntil: null,
       reauthSuggested: false,
       online: true,
+      ...roleChoice, // después del cambio obligatorio se elige la función (ADR 0005)
     });
     logEvent('INFO', 'AUTH', 'LOGIN_ONLINE_OK', { mustChangePassword: true });
     return { ok: true, status: 'CAMBIO_CONTRASENA_REQUERIDO', mode: 'ONLINE' };
@@ -94,6 +107,7 @@ async function applyOnlineLogin(res: LoginResponse, password: string, onPhase?: 
     offlineValidUntil: until,
     reauthSuggested: false,
     online: true,
+    ...roleChoice, // PANT-08 después de cada login (ADR 0005)
   });
   logEvent('INFO', 'AUTH', 'LOGIN_ONLINE_OK');
   return { ok: true, status: 'AUTENTICADO', mode: 'ONLINE' };
@@ -197,6 +211,7 @@ export async function loginOffline(email: string, password: string): Promise<Aut
       : null,
     lastOnlineAuthAt: rec.lastOnlineAuthAt,
     offlineValidUntil: offlineValidUntil(rec.lastOnlineAuthAt, CONFIG.auth.offlineLoginMaxDays),
+    roleChoicePending: true, // PANT-08 después de cada login (ADR 0005)
   });
   logEvent('INFO', 'AUTH', 'LOGIN_OFFLINE_OK');
   return { ok: true, status: 'AUTENTICADO', mode: 'OFFLINE' };
@@ -396,7 +411,8 @@ export async function reauthenticate(password: string): Promise<AuthResult> {
   try {
     const res = await authApi.login({ email: s.user.email, password, device: deviceInfoDto(getDeviceIdentity()) });
     if (res.user.id !== s.user.id) return { ok: false, code: 'INVALID_CREDENTIALS' };
-    const r = await applyOnlineLogin(res, password);
+    // Revalidación en la misma pantalla: no vuelve a pedir la función del celular (askRole = false).
+    const r = await applyOnlineLogin(res, password, undefined, false);
     logEvent('INFO', 'AUTH', 'REAUTH_OK');
     return r;
   } catch (err) {

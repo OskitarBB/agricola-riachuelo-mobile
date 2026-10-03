@@ -14,6 +14,17 @@
 
 export type SyncRunResult = { ok: false; code: 'PENDIENTE' };
 
+/**
+ * ¿Existe la sincronización con el backend? false mientras runSync() sea "Pendiente" (Fase 4).
+ * La usa RN-15 en PANT-08 (src/device/deviceRole.ts): sin sincronización la cola no se puede vaciar, así que
+ * no bloquea el cambio de función (solo avisa). INTEGRACIÓN FUTURA (T-20): cambiar a true al implementar runSync.
+ */
+export const SYNC_IMPLEMENTED = false;
+
+export function isSyncImplemented(): boolean {
+  return SYNC_IMPLEMENTED;
+}
+
 /** Punto de entrada que llamará PANT-20 ("Sincronizar ahora"). */
 export async function runSync(): Promise<SyncRunResult> {
   return { ok: false, code: 'PENDIENTE' };

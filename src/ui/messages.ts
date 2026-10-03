@@ -59,7 +59,11 @@ export type AppErrorCode =
   | 'MARCADOR_CAMBIADO'
   | 'REPETICION_EN_COLA'
   | 'CATALOGOS_ACTUALIZADOS'
-  | 'PENDIENTE';
+  | 'PENDIENTE'
+  // Elección de función después del login (ADR 0005):
+  | 'CAMBIO_FUNCION_SESION_ABIERTA'
+  | 'CAMBIO_FUNCION_FOTOS_PENDIENTES'
+  | 'SINCRONIZACION_PENDIENTE';
 
 export const API_ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   VALIDATION_ERROR: 'Revisa los datos marcados e inténtalo de nuevo.',
@@ -152,6 +156,10 @@ export const APP_ERROR_MESSAGES: Record<AppErrorCode, string> = {
   MARCADOR_CAMBIADO: 'Marcador actualizado.',
   REPETICION_EN_COLA: 'La repetición sale en la siguiente captura.',
   CATALOGOS_ACTUALIZADOS: 'Catálogos actualizados.',
+  CAMBIO_FUNCION_SESION_ABIERTA: 'Hay una sesión de monitoreo abierta en este celular. Ciérrala antes de cambiar la función.',
+  CAMBIO_FUNCION_FOTOS_PENDIENTES:
+    'Hay fotos pendientes de enviar al controlador. Espera a que se envíen antes de cambiar la función.',
+  SINCRONIZACION_PENDIENTE: 'Este celular tiene datos del controlador sin sincronizar. No se borran: quedan guardados aquí.',
   PENDIENTE: 'Pendiente',
 };
 

@@ -1,7 +1,7 @@
 // app/controller/new-pass.tsx — PANT-15 Nueva pasada (maestro §8.4 y §8.7; RF-16, RF-20; RN-10, RN-12).
 //
 // QUÉ HACE: selectores encadenados SIN internet (lote → hilera → segmento → marcador de inicio), lateral
-// (A primero) y dirección. Si ese lateral ya se hizo en la hilera, es "Repetir lateral" y exige el motivo
+// (A primero). La dirección no se elige en pantalla: se registra ASCENDENTE por defecto. Si ese lateral ya se hizo en la hilera, es "Repetir lateral" y exige el motivo
 // (incidencia OPERADOR). "Iniciar pasada" exige ambas cámaras CONECTADA, prueba corta aprobada y batería/
 // espacio mínimos (RN-10): envía START_PASS y, con el ACK de ambas, la pasada queda ACTIVA (≤ 3 toques, RNF-08).
 // Puede recibir parámetros (lotId, rowId, lateral) desde "Crear LATERAL B" u "Otra hilera" (PANT-18).
@@ -14,7 +14,7 @@ import { catalogs } from '../../src/controller/catalogService';
 import { controllerRuntime } from '../../src/controller/controllerRuntime';
 import { useController } from '../../src/controller/controllerStore';
 import { evaluateNewPass } from '../../src/controller/passService';
-import type { Direction, FieldRow, LateralCode, Lot, Marker, Segment } from '../../src/domain/types';
+import type { FieldRow, LateralCode, Lot, Marker, Segment } from '../../src/domain/types';
 import { AppButton } from '../../src/ui/components/AppButton';
 import { AppHeader } from '../../src/ui/components/AppHeader';
 import { Card } from '../../src/ui/components/Card';
@@ -25,7 +25,7 @@ import { Segmented } from '../../src/ui/components/Segmented';
 import { StatusPill } from '../../src/ui/components/StatusPill';
 import { TextField } from '../../src/ui/components/TextField';
 import { messageFor } from '../../src/ui/messages';
-import { DIRECTION_LABEL, LATERAL_LABEL, LINK_LABEL, ROLE_LABEL, S } from '../../src/ui/strings';
+import { LATERAL_LABEL, LINK_LABEL, ROLE_LABEL, S } from '../../src/ui/strings';
 import { colors, font, linkTone, radius } from '../../src/ui/theme';
 import { showToast } from '../../src/ui/toast';
 
@@ -39,7 +39,6 @@ export default function NewPassScreen() {
   const [lotId, setLotId] = useState<string | null>(params.lotId ?? null);
   const [rowId, setRowId] = useState<string | null>(params.rowId ?? null);
   const [lateral, setLateral] = useState<LateralCode>(params.lateral === 'LATERAL_B' ? 'LATERAL_B' : 'LATERAL_A');
-  const [direction, setDirection] = useState<Direction>('ASCENDENTE');
   const [segmentId, setSegmentId] = useState<string | null>(null);
   const [markerId, setMarkerId] = useState<string | null>(null);
   const [isRepeat, setIsRepeat] = useState(false);
@@ -66,9 +65,8 @@ export default function NewPassScreen() {
       void catalogs.markers(rowId).then((m) => {
         if (!alive) return;
         setMarkers(m);
-        // Por defecto, el primer marcador de INICIO (o el último si se avanza en sentido descendente).
-        const starts = m.filter((x) => x.position === 'INICIO');
-        const def = direction === 'ASCENDENTE' ? starts[0] : starts[starts.length - 1];
+        // Por defecto, el primer marcador de INICIO.
+        const def = m.find((x) => x.position === 'INICIO');
         setMarkerId(def?.id ?? m[0]?.id ?? null);
         setSegmentId(def?.segmentId ?? null);
       });
@@ -76,7 +74,7 @@ export default function NewPassScreen() {
     return () => {
       alive = false;
     };
-  }, [rowId, direction]);
+  }, [rowId]);
   useEffect(() => {
     if (!session || !rowId) return;
     void evaluateNewPass(session.sessionId, rowId, lateral).then((e) => {
@@ -103,7 +101,8 @@ export default function NewPassScreen() {
       lotId,
       rowId,
       lateral,
-      direction,
+      // La dirección ya no se elige en pantalla; la base de datos y el protocolo la exigen, se envía la de defecto.
+      direction: 'ASCENDENTE',
       segmentId: segmentId ?? markers.find((m) => m.id === markerId)?.segmentId ?? null,
       markerId,
       repeatReason: isRepeat ? reason : null,
@@ -168,15 +167,6 @@ export default function NewPassScreen() {
           ]}
           value={lateral}
           onChange={setLateral}
-        />
-        <Text style={[styles.label, { marginTop: 14 }]}>{S.newPass.direction}</Text>
-        <Segmented<Direction>
-          options={[
-            { value: 'ASCENDENTE', label: DIRECTION_LABEL.ASCENDENTE },
-            { value: 'DESCENDENTE', label: DIRECTION_LABEL.DESCENDENTE },
-          ]}
-          value={direction}
-          onChange={setDirection}
         />
       </Card>
       <Card delay={130}>

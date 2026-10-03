@@ -16,7 +16,6 @@ import { releaseControllerSyncedPhotos } from '../src/camera/retentionService';
 import { APP_VERSION, CONFIG, CONFIG_VERSION, ENV, PROTOCOL_VERSION_LABEL } from '../src/config';
 import { formatDateTime } from '../src/domain/time';
 import { batteryPct } from '../src/device/batteryService';
-import { canChangeRole } from '../src/device/deviceRole';
 import { setHapticsEnabled, setSoundsEnabled } from '../src/device/preferences';
 import { freeSpace } from '../src/device/storageInfo';
 import { exportAndShareDiagnostics } from '../src/diagnostics/exportDiagnostics';
@@ -44,14 +43,8 @@ export default function SettingsScreen() {
     }, []),
   );
 
-  const changeRole = async () => {
-    const r = await canChangeRole(deviceRole);
-    if (!r.ok) {
-      showToast(r.code, 'warn');
-      return;
-    }
-    router.push('/role');
-  };
+  // PANT-08 muestra qué funciones se pueden elegir y, si RN-15 lo impide, el motivo (ADR 0005).
+  const changeRole = () => router.push('/role');
 
   const retryTransfers = async () => {
     const n = await cameraAgent.retryErroredTransfers();

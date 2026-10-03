@@ -3,7 +3,8 @@
 // QUÉ HACE (contexto §25.8, "menos texto, más estado y acción"):
 //  - Cabecera de estado: lote · hilera · lateral, marcador y segmento actuales, GPS y precisión, modo.
 //  - Contadores animados (total, completas, parciales, incompletas) y tarjetas de las dos cámaras.
-//  - Última secuencia con el resultado de cada cámara y botones "Repetir CÁMARA X (secuencia N)" (RN-07).
+//  - Botones "Repetir CÁMARA X (secuencia N)" (RN-07) justo debajo de la cabecera de estado, y la última
+//    secuencia con el resultado de cada cámara.
 //  - MANUAL:      [CAPTURAR] [PAUSAR] [CAMBIAR MARCADOR] [TERMINAR PASADA]
 //  - AUTOMÁTICO:  "Captura automática: ACTIVA" + [PAUSAR] siempre visible; [CAMBIAR MARCADOR] solo en pausa;
 //                 en pausa: [REANUDAR] [CAMBIAR MARCADOR] [TERMINAR PASADA]  (secuencia PAUSAR → CAMBIAR → REANUDAR).
@@ -165,6 +166,19 @@ export default function PassScreen() {
         {auto ? <InfoRow dark label={S.pass.interval} value={`${Math.round(session.intervalMs / 1000)} s`} /> : null}
       </Card>
 
+      {/* Repeticiones pendientes justo debajo del contexto, visibles sin desplazarse (RN-07). */}
+      {retakes.map((r) => (
+        <FadeIn key={`${r.role}-${r.sequenceId}`} from="right">
+          <AppButton
+            title={retakeLabel(r.role, r.sequenceNumber)}
+            variant="gold"
+            style={{ marginBottom: 10 }}
+            disabled={paused || cameras[r.role].link !== 'CONECTADA' || (orderInFlight && !auto)}
+            onPress={() => act(() => controllerRuntime.retake(r.role))}
+          />
+        </FadeIn>
+      ))}
+
       <Card delay={80}>
         <View style={styles.counters}>
           <AnimatedCounter value={counters.total} label={S.pass.total} />
@@ -192,18 +206,6 @@ export default function PassScreen() {
           </Card>
         </FadeIn>
       ) : null}
-
-      {retakes.map((r) => (
-        <FadeIn key={`${r.role}-${r.sequenceId}`} from="right">
-          <AppButton
-            title={retakeLabel(r.role, r.sequenceNumber)}
-            variant="gold"
-            style={{ marginBottom: 10 }}
-            disabled={paused || cameras[r.role].link !== 'CONECTADA' || (orderInFlight && !auto)}
-            onPress={() => act(() => controllerRuntime.retake(r.role))}
-          />
-        </FadeIn>
-      ))}
 
       {alerts.map((a) => (
         <Text key={a} style={styles.alert}>

@@ -21,3 +21,23 @@
 - Fase 4: sincronización con la web/base de datos (`src/sync/syncService.ts`).
 - Calibración en campo de umbrales de calidad y estabilidad; evidencias en `docs/evidencias/`.
 - Prueba de vinculación real con 3 Android (APK EAS).
+
+---
+
+# Cambios del 2026-10-03 — Función del celular después del login (ADR 0005)
+
+## Hecho
+- Después de cada inicio de sesión aparece PANT-08 para elegir **Controlador, Cámara 1 o Cámara 2**
+  (rediseñada: selección + «Usar como …», marca *Actual*, bloqueos de RN-15 con su motivo).
+- RN-15: la cola de sincronización pendiente ya no bloquea el cambio de función mientras la Fase 4 no exista
+  (solo avisa; los datos se conservan). Sesión abierta y fotos por enviar siguen bloqueando.
+- PANT-30 (Cámara 1/2): batería, espacio e IP del Wi-Fi antes de vincular, y «Reintentar» del lector de QR.
+- PANT-15: se quitó el selector de dirección (la pasada se registra ASCENDENTE por defecto).
+
+## Validación
+- `tsc --noEmit`: sin errores nuevos (siguen los 14 de ciclos y cobertura, CFG-3, que ya existían).
+- `eslint`: sin errores. Jest: 10 suites, 65 pruebas; falla solo la prueba de CFG-3 que ya fallaba
+  (`validatePassDirection` no existe en `rules.ts`).
+
+## Pendiente
+- Probar en el celular: login → PANT-08 → Cámara 1 → permisos → PANT-30, y el regreso a Controlador.

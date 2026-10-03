@@ -53,7 +53,11 @@ durante 7 días (verificador PBKDF2 en SecureStore; la contraseña nunca se guar
 ## 3. Qué probar en Expo Go (un solo celular)
 
 1. **Login** con logo animado, validación por campo, sonidos y vibración en los botones.
-2. **Función del dispositivo:** *Controlador* o *Cámara*. **Permisos:** cámara y ubicación.
+2. **Función del dispositivo (después de CADA login):** tarjetas *Controlador*, *Cámara 1* y *Cámara 2*; se toca
+   una y se confirma con «Usar como …». La función guardada aparece como *Actual*. Si el celular tiene una sesión
+   de monitoreo abierta o fotos por enviar, las otras funciones se ven bloqueadas con el motivo (RN-15, ADR 0005).
+   **Permisos:** ubicación (controlador) o cámara (cámaras). Al reabrir la app con la sesión guardada se entra
+   directo a la función guardada; para cambiarla: *Ajustes › Cambiar función* o cerrar sesión y volver a entrar.
 3. **Controlador (con simulador):** en Expo Go no existen sockets TCP, así que el controlador usa
    **dos cámaras virtuales** que se comportan como celulares reales (conexión, latencia, fotos de muestra
    útiles/oscuras/borrosas, reconexión).
@@ -63,13 +67,17 @@ durante 7 días (verificador PBKDF2 en SecureStore; la contraseña nunca se guar
      PAUSAR → CAMBIAR MARCADOR → CONFIRMAR → REANUDAR), repetición de fotos rechazadas, cerrar pasada,
      resumen de sesión.
    - *Herramientas de simulación* (plegable): cortar una cámara 10 s o forzar una foto oscura.
-4. **Cámara → Modo prueba:** usa la cámara real del celular.
+4. **Cámara 1 / Cámara 2 → Escanear QR (PANT-30):** función de la cámara, estado de red, batería, espacio y la IP
+   del Wi-Fi; lector del QR del controlador con *Reintentar*. Al leer el QR la cámara se vincula y pasa a
+   *Cámara en sesión* (PANT-31). En Expo Go la cámara sí puede vincularse, pero solo con un controlador instalado
+   como APK (el controlador de Expo Go usa cámaras simuladas y no abre un servidor real).
+5. **Cámara → Modo prueba:** usa la cámara real del celular.
    - **Manual:** botón de disparo.
    - **Automático:** solo dispara cuando el acelerómetro y el giroscopio indican que el celular está
      **quieto y estable** (anillo de estabilidad en pantalla). Si se mueve, espera y no toma la foto.
    - Cada foto pasa por el control de calidad (exposición y nitidez) y se guarda localmente.
-5. **Galería:** ver las fotos guardadas (pantalla completa, deslizar, datos de calidad, filtro, borrar pruebas).
-6. **Ajustes:** sonidos y vibración on/off, datos del dispositivo, cambio de función. *Cerrar sesión* está
+6. **Galería:** ver las fotos guardadas (pantalla completa, deslizar, datos de calidad, filtro, borrar pruebas).
+7. **Ajustes:** sonidos y vibración on/off, datos del dispositivo, cambio de función. *Cerrar sesión* está
    junto a *Ajustes* en la cabecera.
 
 ## 4. Vinculación real entre 3 celulares Android (APK con EAS)
@@ -100,7 +108,7 @@ Al terminar, EAS da un enlace/QR para descargar el `.apk`; instálalo en los cel
 ```bash
 npm run typecheck    # TypeScript estricto
 npm run lint         # ESLint (eslint-config-expo)
-npm test             # Jest: 8 suites, 45 pruebas (dominio, reglas, protocolo, WebSocket, HTTP, auth, reintentos, calidad)
+npm test             # Jest: dominio, reglas, protocolo, WebSocket, HTTP, auth, reintentos, calidad y función del celular
 npm run validate     # las tres anteriores
 npm run doctor       # expo-doctor (requiere internet)
 ```

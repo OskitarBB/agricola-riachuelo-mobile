@@ -8,6 +8,8 @@ Reglas del proyecto (resumen):
 - Todo plugin de `app.json` debe estar instalado. Nada nativo fuera de Expo Go se carga sin `require()` diferido
   e `isRunningInExpoGo()` (ver `src/local-network/factory.ts`).
 - Solo modos MANUAL y AUTOMÁTICO. Cambio de marcador manual; en AUTOMÁTICO solo en pausa.
+- Después de CADA login se elige la función del celular en PANT-08 (Controlador, Cámara 1, Cámara 2) y RN-15 se
+  decide con `decideRoleChange` (ADR 0005). La cola de sincronización solo bloquea cuando exista la Fase 4.
 - Textos de UI solo en `src/ui/strings.ts` / `src/ui/messages.ts`. Funciones no implementadas muestran "Pendiente".
 - Parámetros solo en `src/config/defaults.ts` (CFG-2) y coherentes con `checkConfigCoherence()`.
 - Cada archivo empieza con un comentario "QUÉ HACE" (+ "INTEGRACIÓN FUTURA" si cambia con la web/BD).
