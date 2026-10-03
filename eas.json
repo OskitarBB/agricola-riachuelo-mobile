@@ -1,0 +1,39 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_USE_MOCK_API": "1",
+        "EXPO_PUBLIC_APP_ENV": "dev"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_USE_MOCK_API": "1",
+        "EXPO_PUBLIC_APP_ENV": "dev"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "piloto": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_USE_MOCK_API": "1",
+        "EXPO_PUBLIC_APP_ENV": "piloto"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}

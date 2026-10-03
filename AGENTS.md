@@ -1,3 +1,20 @@
+# Riachuelo Monitoreo — guía para agentes y desarrolladores
+
+**Antes de cambiar código lee:** `docs/referencia/MAESTRO_APP_MOVIL_v1.0.pdf` (reglas R-01..R-20, RN, protocolo,
+anexos), `docs/referencia/CONTEXTO_ERRORES_Y_CONFIGURACION.txt` (cambios CFG-2 y errores ya resueltos) y `docs/adr/`.
+
+Reglas del proyecto (resumen):
+- SDK 57. Instalar módulos con `npx expo install` (en entornos sin acceso a api.expo.dev: `EXPO_OFFLINE=1`).
+- Todo plugin de `app.json` debe estar instalado. Nada nativo fuera de Expo Go se carga sin `require()` diferido
+  e `isRunningInExpoGo()` (ver `src/local-network/factory.ts`).
+- Solo modos MANUAL y AUTOMÁTICO. Cambio de marcador manual; en AUTOMÁTICO solo en pausa.
+- Textos de UI solo en `src/ui/strings.ts` / `src/ui/messages.ts`. Funciones no implementadas muestran "Pendiente".
+- Parámetros solo en `src/config/defaults.ts` (CFG-2) y coherentes con `checkConfigCoherence()`.
+- Cada archivo empieza con un comentario "QUÉ HACE" (+ "INTEGRACIÓN FUTURA" si cambia con la web/BD).
+- Antes de terminar: `npm run validate` (typecheck + lint + jest).
+
+---
+
 This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
 ## Expo has changed — do not trust your training data
@@ -25,7 +42,7 @@ Run lint and typecheck before declaring any task done.
 
 ## Navigation & Routing
 
-- Use **Expo Router** for all navigation. Routes live in `src/app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) outside `src/app/`.
+- Use **Expo Router** for all navigation. Routes live in `app/` (project root) — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) in `src/`.
 - Import `Link`, `router`, and `useLocalSearchParams` from `expo-router`.
 - Docs: https://docs.expo.dev/router/introduction.md
 
