@@ -1,6 +1,6 @@
-// src/api/mock/mockBackend.ts — Backend SIMULADO con el mismo contrato que Spring Boot (maestro §15.6).
+// src/api/mock/mockBackend.ts — Backend SIMULADO con el mismo contrato que la plataforma Django (maestro §15.6).
 //
-// QUÉ HACE: implementa AuthApi, BootstrapApi y SyncApi en memoria, con latencia y tasa de fallos
+// QUÉ HACE: implementa AuthApi, BootstrapApi, SyncApi y UploadApi en memoria, con latencia y tasa de fallos
 // configurables. Se activa con EXPO_PUBLIC_USE_MOCK_API=1 (o si no hay EXPO_PUBLIC_API_URL).
 //  - Si el celular no tiene internet (expo-network), responde como "sin red" → se prueba el login sin internet.
 //  - Cuentas de prueba (contraseña Demo2026 salvo indicación):
@@ -11,9 +11,12 @@
 //      temporal@demo.pe   / Temp2026 → obliga a cambiar la contraseña (mustChangePassword)
 //      supervisor@demo.pe SUPERVISOR → ROLE_NOT_ALLOWED
 //  - Los tokens simulados se autovalidan (llevan userId y vencimiento) para sobrevivir reinicios de la app.
-//  - Las subidas simuladas guardan solo captureId y md5 para probar duplicados y conflictos.
-//
-// ESTE ARCHIVO SE ELIMINA (o queda solo para pruebas) cuando el backend real esté disponible.
+//  - Sincronización (v2.0): recuerda sesiones, pasadas y secuencias recibidas para responder SESSION_NOT_FOUND,
+//    PASS_NOT_FOUND o SEQUENCE_NOT_FOUND como el servidor real (la memoria se pierde al reiniciar la app: así se
+//    prueba el reenvío de padres, §15.5 paso 8). Ticket con url 'mock://cloudinary/upload' (mockCloudinary.ts),
+//    confirmación que acepta cualquier firma no vacía y responde UPLOAD_MISMATCH si bytes ≠ sizeBytes.
+//  - Las capturas confirmadas guardan solo captureId, md5 y tamaño (duplicados y conflictos).
+// Es solo para desarrollo y demostraciones: el APK del piloto usa la plataforma real (eas.json, perfil piloto).
 
 import * as Network from 'expo-network';
 
@@ -21,8 +24,9 @@ import { MOBILE_ALLOWED_ROLES, type AccountStatus, type UserProfile, type UserRo
 import type { AuthApi } from '../authApi';
 import type { BootstrapApi } from '../bootstrapApi';
 import type { ApiErrorCode, LoginResponse } from '../dto';
-import { ApiError } from '../httpClient';
+import { ApiError, toCallResult, type ApiCallResult } from '../httpClient';
 import type { SyncApi } from '../syncApi';
+import type { UploadApi } from '../uploadApi';
 import { buildMockBootstrap } from './mockCatalog';
 
 interface MockUser {
@@ -31,8 +35,10 @@ interface MockUser {
 }
 
 const LATENCY_MS: [number, number] = [250, 650];
-const ACCESS_TTL_MS = 30 * 60_000;
+const ACCESS_TTL_MS = 15 * 60_000; // como SimpleJWT en la plataforma (15 min)
 const REFRESH_TTL_MS = 14 * 86_400_000;
+const TICKET_TTL_MS = 3_600_000;
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 function user(
   id: string,
@@ -93,7 +99,12 @@ const users = new Map<string, MockUser>(
   ].map((u) => [u.profile.email, u]),
 );
 
-const uploads = new Map<string, string>(); // captureId → md5
+// Estado de la "plataforma" simulada (solo en memoria).
+const sessions = new Map<string, string>(); // sessionId → status
+const passes = new Map<string, { sessionId: string; lateral: string }>(); // passId → sesión y lateral
+const sequences = new Map<string, string>(); // sequenceId → passId
+const incidents = new Set<string>();
+const confirmed = new Map<string, { md5: string; sizeBytes: number }>(); // captureId → archivo
 
 /** Probabilidad de fallo 5xx simulado en sincronización (0 por defecto). */
 let failureRate = 0;
@@ -119,7 +130,7 @@ async function requireInternet(): Promise<void> {
 }
 
 function fail(status: number, code: ApiErrorCode, fieldErrors: { field: string; message: string }[] = []): never {
-  throw new ApiError('HTTP', status, code, fieldErrors);
+  throw new ApiError('HTTP', status, code, fieldErrors, `mock-${Date.now().toString(36)}`);
 }
 
 function makeTokens(u: UserProfile): LoginResponse {
@@ -148,6 +159,13 @@ function checkAccess(u: MockUser): void {
   if (s === 'RECHAZADO') fail(403, 'ACCOUNT_REJECTED');
   if (s === 'BLOQUEADO') fail(403, 'ACCOUNT_BLOCKED');
   if (!u.profile.roles.some((r) => MOBILE_ALLOWED_ROLES.includes(r))) fail(403, 'ROLE_NOT_ALLOWED');
+}
+
+function requireUser(token: string): MockUser {
+  const u = userFromToken(token, 'mock');
+  if (!u) fail(401, 'TOKEN_EXPIRED');
+  checkAccess(u);
+  return u;
 }
 
 export const mockAuthApi: AuthApi = {
@@ -186,7 +204,7 @@ export const mockAuthApi: AuthApi = {
     if (!u) fail(401, 'TOKEN_EXPIRED');
     if (u.password !== req.currentPassword) fail(401, 'INVALID_CREDENTIALS');
     if (req.newPassword.length < 8 || !/\d/.test(req.newPassword) || !/[A-Za-z]/.test(req.newPassword))
-      fail(400, 'PASSWORD_POLICY');
+      fail(400, 'PASSWORD_POLICY', [{ field: 'newPassword', message: 'Debe incluir letras y números (8 o más).' }]);
     u.password = req.newPassword;
     u.profile.mustChangePassword = false;
   },
@@ -199,7 +217,7 @@ export const mockAuthApi: AuthApi = {
 export const mockBootstrapApi: BootstrapApi = {
   async bootstrap(accessToken) {
     await requireInternet();
-    if (!userFromToken(accessToken, 'mock')) fail(401, 'TOKEN_EXPIRED');
+    requireUser(accessToken);
     return buildMockBootstrap(new Date().toISOString());
   },
 };
@@ -209,28 +227,152 @@ async function maybeFail(): Promise<void> {
   if (Math.random() < failureRate) fail(503, 'INTERNAL_ERROR');
 }
 
+/** Ejecuta la lógica simulada y devuelve ApiCallResult como el cliente real. */
+async function call<T>(status: number, fn: () => T | Promise<T>): Promise<ApiCallResult<T>> {
+  try {
+    await maybeFail();
+    return { ok: true, status, data: await fn() };
+  } catch (err) {
+    return toCallResult<T>(err);
+  }
+}
+
+function requireSession(sessionId: string): void {
+  if (!sessions.has(sessionId)) fail(404, 'SESSION_NOT_FOUND');
+}
+
 export const mockSyncApi: SyncApi = {
-  async upsertSession() {
-    await maybeFail();
-  },
-  async upsertPass() {
-    await maybeFail();
-  },
-  async sequenceBatch(req) {
-    await maybeFail();
-    return { accepted: req.sequences.length, duplicates: 0 };
-  },
-  async incidentBatch(req) {
-    await maybeFail();
-    return { accepted: req.incidents.length, duplicates: 0 };
-  },
-  async uploadCapture(_fileUri, meta) {
-    await maybeFail();
-    const prev = uploads.get(meta.captureId);
-    if (prev && prev !== meta.md5) fail(409, 'CAPTURE_CONFLICT');
-    uploads.set(meta.captureId, meta.md5);
-    return { captureId: meta.captureId, status: 'SINCRONIZADO', duplicate: prev !== undefined };
-  },
+  upsertSession: (req, token) =>
+    call(sessions.has(req.sessionId) ? 200 : 201, () => {
+      requireUser(token);
+      const prev = sessions.get(req.sessionId);
+      const status = prev === 'CLOSED' ? 'CLOSED' : req.status; // una sesión CLOSED no se reabre
+      sessions.set(req.sessionId, status);
+      return { sessionId: req.sessionId, status };
+    }),
+  upsertPass: (sessionId, req, token) =>
+    call(passes.has(req.passId) ? 200 : 201, () => {
+      requireUser(token);
+      requireSession(sessionId);
+      passes.set(req.passId, { sessionId, lateral: req.lateralCode });
+      return { passId: req.passId, status: req.status };
+    }),
+  sequenceBatch: (req, token) =>
+    call(200, () => {
+      requireUser(token);
+      requireSession(req.sessionId);
+      let accepted = 0;
+      let duplicates = 0;
+      for (const s of req.sequences) {
+        if (!passes.has(s.passId)) fail(404, 'PASS_NOT_FOUND');
+        if (sequences.has(s.sequenceId)) duplicates += 1;
+        else accepted += 1;
+        sequences.set(s.sequenceId, s.passId);
+      }
+      return { accepted, duplicates };
+    }),
+  incidentBatch: (req, token) =>
+    call(200, () => {
+      requireUser(token);
+      requireSession(req.sessionId);
+      let accepted = 0;
+      let duplicates = 0;
+      for (const i of req.incidents) {
+        if (i.passId && !passes.has(i.passId)) fail(404, 'PASS_NOT_FOUND');
+        if (i.sequenceId && !sequences.has(i.sequenceId)) fail(404, 'SEQUENCE_NOT_FOUND');
+        if (incidents.has(i.incidentId)) duplicates += 1;
+        else accepted += 1;
+        incidents.add(i.incidentId);
+      }
+      return { accepted, duplicates };
+    }),
+};
+
+function checkParents(sessionId: string, passId: string, sequenceId: string): void {
+  requireSession(sessionId);
+  const p = passes.get(passId);
+  if (!p || p.sessionId !== sessionId) fail(404, 'PASS_NOT_FOUND');
+  if (sequences.get(sequenceId) !== passId) fail(404, 'SEQUENCE_NOT_FOUND');
+}
+
+export const mockUploadApi: UploadApi = {
+  requestTicket: (req, token) =>
+    call(200, () => {
+      requireUser(token);
+      checkParents(req.sessionId, req.passId, req.sequenceId);
+      const prev = confirmed.get(req.captureId);
+      const serverTime = new Date().toISOString();
+      if (prev) {
+        if (prev.md5 !== req.md5.toLowerCase() || prev.sizeBytes !== req.sizeBytes) fail(409, 'CAPTURE_CONFLICT');
+        return { captureId: req.captureId, alreadyConfirmed: true, upload: null, serverTime };
+      }
+      if (req.sizeBytes > MAX_UPLOAD_BYTES) fail(413, 'PAYLOAD_TOO_LARGE');
+      const publicId = `riachuelo/dev/${req.sessionId}/${req.passId}/${req.captureId}`;
+      return {
+        captureId: req.captureId,
+        alreadyConfirmed: false,
+        upload: {
+          url: 'mock://cloudinary/upload',
+          fields: {
+            api_key: 'mock',
+            timestamp: String(Math.floor(Date.now() / 1000)),
+            public_id: publicId,
+            type: 'authenticated',
+            overwrite: 'false',
+            signature: 'mock',
+            x_size_bytes: String(req.sizeBytes),
+          },
+          publicId,
+          expiresAt: new Date(Date.parse(serverTime) + TICKET_TTL_MS).toISOString(),
+          maxBytes: MAX_UPLOAD_BYTES,
+        },
+        serverTime,
+      };
+    }),
+  confirm: (req, token) =>
+    call(confirmed.has(req.metadata.captureId) ? 200 : 201, () => {
+      requireUser(token);
+      const m = req.metadata;
+      checkParents(m.sessionId, m.passId, m.sequenceId);
+      const prev = confirmed.get(m.captureId);
+      if (prev) {
+        if (prev.md5 !== m.md5.toLowerCase() || prev.sizeBytes !== m.sizeBytes) fail(409, 'CAPTURE_CONFLICT');
+        return { captureId: m.captureId, status: 'SINCRONIZADO' as const, duplicate: true };
+      }
+      if (passes.get(m.passId)?.lateral !== m.lateralCode)
+        fail(400, 'VALIDATION_ERROR', [{ field: 'metadata.lateralCode', message: 'No coincide con el lateral de la pasada.' }]);
+      if (!req.cloudinary.signature) fail(422, 'UPLOAD_SIGNATURE_INVALID');
+      const expectedId = `riachuelo/dev/${m.sessionId}/${m.passId}/${m.captureId}`;
+      if (req.cloudinary.publicId !== expectedId || req.cloudinary.bytes !== m.sizeBytes) fail(409, 'UPLOAD_MISMATCH');
+      confirmed.set(m.captureId, { md5: m.md5.toLowerCase(), sizeBytes: m.sizeBytes });
+      return { captureId: m.captureId, status: 'SINCRONIZADO' as const, duplicate: false };
+    }),
+  uploadMultipart: (_fileUri, meta, token) =>
+    call(confirmed.has(meta.captureId) ? 200 : 201, () => {
+      requireUser(token);
+      checkParents(meta.sessionId, meta.passId, meta.sequenceId);
+      const prev = confirmed.get(meta.captureId);
+      if (prev && (prev.md5 !== meta.md5.toLowerCase() || prev.sizeBytes !== meta.sizeBytes)) fail(409, 'CAPTURE_CONFLICT');
+      if (meta.sizeBytes > MAX_UPLOAD_BYTES) fail(413, 'PAYLOAD_TOO_LARGE');
+      confirmed.set(meta.captureId, { md5: meta.md5.toLowerCase(), sizeBytes: meta.sizeBytes });
+      return { captureId: meta.captureId, status: 'SINCRONIZADO' as const, duplicate: prev !== undefined };
+    }),
+  captureStatus: (captureId, token) =>
+    call(200, () => {
+      requireUser(token);
+      const c = confirmed.get(captureId);
+      if (!c) fail(404, 'NOT_FOUND');
+      return {
+        captureId,
+        status: 'SINCRONIZADO' as const,
+        sessionId: '',
+        passId: '',
+        sequenceId: '',
+        sizeBytes: c.sizeBytes,
+        md5: c.md5,
+        confirmedAt: new Date().toISOString(),
+      };
+    }),
 };
 
 /** Cuentas de prueba visibles en la pantalla de login (solo con backend simulado). */

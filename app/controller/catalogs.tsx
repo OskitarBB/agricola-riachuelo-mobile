@@ -2,7 +2,7 @@
 //
 // QUÉ HACE: muestra versión, fecha y conteos de lotes, hileras, segmentos y marcadores (con contadores
 // animados). "Actualizar" requiere internet y reemplaza los catálogos de forma atómica.
-// INTEGRACIÓN FUTURA: GET /api/v1/mobile/bootstrap del backend real (datos que se administran en la web).
+// Plataforma Django: GET /api/v1/mobile/bootstrap (catálogos que se administran en la web y perfil de calidad publicado).
 
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';

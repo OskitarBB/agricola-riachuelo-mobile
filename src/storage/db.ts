@@ -12,9 +12,13 @@
 import * as SQLite from 'expo-sqlite';
 
 import { MIGRATION_001 } from './migrations/001_initial';
+// 002: migración de la entrega v0.3.0 (ciclos de monitoreo, CFG-3; maestro v2.0 §12.2). Solo agrega tablas y una columna.
+import { MIGRATION_002 } from './migrations/002_cobertura';
+import { MIGRATION_003 } from './migrations/003_remote_uploads'; // v2.0: subida directa a Cloudinary (12.1.1)
+import { MIGRATION_004 } from './migrations/004_catalog_codes'; // Fase 4: códigos de catálogo no únicos (ADR 0007)
 
-/** Índice + 1 = versión del esquema. Nunca modificar una migración publicada: agregar 002, 003… */
-const MIGRATIONS: readonly string[] = [MIGRATION_001];
+/** Índice + 1 = versión del esquema. Nunca modificar una migración publicada: agregar 005, 006… */
+export const MIGRATIONS: readonly string[] = [MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004];
 
 export const DB_NAME = 'riachuelo.db';
 

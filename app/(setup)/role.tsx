@@ -5,10 +5,10 @@
 // cada función, lo que necesita (permiso y Wi-Fi) y la marca "Actual" en la función guardada. Se toca una
 // tarjeta y se confirma con "Usar como …" (botón fijo abajo). Al confirmar:
 //  - misma función → continúa (pasa por PANT-07 solo si falta algún permiso, maestro §7.4 paso 6);
-//  - otra función → RN-15 con decideRoleChange (src/domain/rules.ts): una sesión de monitoreo abierta o fotos
-//    por enviar al controlador BLOQUEAN (aviso arriba y candado en las tarjetas); la cola de sincronización
-//    pendiente solo AVISA mientras la Fase 4 no exista. Se detienen los servicios de la función anterior (no se
-//    borra ningún dato), se guarda app_meta.device_role y se pasa a PANT-07 o directo a la pantalla principal:
+//  - otra función → RN-15 con decideRoleChange (src/domain/rules.ts): una sesión de monitoreo abierta, fotos
+//    por enviar al controlador o (Fase 4) datos del controlador sin sincronizar BLOQUEAN (aviso arriba y candado en
+//    las tarjetas); los datos con error de sincronización solo AVISAN. Se detienen los servicios de la función
+//    anterior (no se borra ningún dato), se guarda app_meta.device_role y se pasa a PANT-07 o directo a la pantalla principal:
 //    Controlador → PANT-10; Cámara 1/2 → PANT-30 (vincular por QR) o PANT-31 si ya está unida a una sesión.
 // Recién iniciada la sesión no hay "Volver": la cabecera ofrece "Cerrar sesión" en la misma zona (§25.3).
 

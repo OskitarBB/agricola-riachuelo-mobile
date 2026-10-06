@@ -6,7 +6,7 @@
 
 import { Platform } from 'react-native';
 
-import type { CameraLinkStatus, QualityStatus, SlotOutcome } from '../domain/types';
+import type { CameraLinkStatus, QualityStatus, RemoteSyncStatus, SlotOutcome } from '../domain/types';
 
 export const colors = {
   brandDeep: '#0E3B24',
@@ -92,6 +92,14 @@ export function qualityTone(q: QualityStatus | null): Tone {
   if (q === 'PENDIENTE_REVISION_TECNICA' || q === 'CAPTURED') return 'info';
   if (q === 'ERROR_CAMARA') return 'error';
   return 'warn';
+}
+
+/** Estado de una foto respecto de la plataforma (galería del controlador). */
+export function cloudTone(s: RemoteSyncStatus | null): Tone {
+  if (s === 'SINCRONIZADO') return 'ok';
+  if (s === 'ERROR_SINCRONIZACION') return 'error';
+  if (s === 'SUBIENDO') return 'info';
+  return 'neutral';
 }
 
 export function slotTone(o: SlotOutcome | null): Tone {

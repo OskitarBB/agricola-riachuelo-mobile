@@ -8,12 +8,19 @@
 //  - Todo login correcto desde PANT-02 (con o sin internet) marca roleChoicePending: la app pasa por PANT-08
 //    para elegir la función del celular (ADR 0005). restoreSession() y reauthenticate() no la marcan.
 //  - restoreSession(): al abrir la app decide AUTENTICADO (ONLINE/OFFLINE) o SIN_SESION (tabla de 7.11).
-//  - getAccessToken(): renueva el token si vence pronto (refreshMarginSeconds); ante REFRESH_INVALID,
-//    ACCOUNT_BLOCKED, DEVICE_REVOKED o ROLE_NOT_ALLOWED aplica la revocación (borra tokens y verificador,
-//    conserva datos de campo).
+//  - getAccessToken(): renueva el token si vence pronto (refreshMarginSeconds, medido con la HORA DEL SERVIDOR);
+//    ante REFRESH_INVALID, ACCOUNT_BLOCKED, ACCOUNT_PENDING, ACCOUNT_REJECTED, DEVICE_REVOKED o ROLE_NOT_ALLOWED aplica
+//    la revocación (borra tokens y verificador, conserva datos de campo).
+//  - refreshAccessToken(): UNA sola renovación a la vez. Django rota el refresh y pone el anterior en la lista negra
+//    (SimpleJWT, D-28): dos renovaciones simultáneas con el mismo refresh harían que la segunda reciba REFRESH_INVALID y
+//    la app cerrara la sesión sin motivo. Por eso los llamadores comparten la misma petición en curso.
+//  - callWithToken(): llama a la API con un token vigente y, ante 401 TOKEN_EXPIRED, renueva una vez y repite
+//    (clase RENOVAR_TOKEN del Anexo C.3).
+//  - noteServerTime(): guarda la diferencia entre la hora del servidor (serverTime de login, refresh, health y
+//    bootstrap) y la del celular; un celular con la hora mal puesta no debe usar tokens vencidos ni renovarlos de más.
 //  - logout(): bloqueado si hay una sesión de monitoreo abierta (RN-19).
 //
-// INTEGRACIÓN FUTURA: con el backend real no cambia nada aquí; solo se reemplaza la API en src/api/index.ts.
+// Backend real: la plataforma Django /api/v1 (src/api/index.ts elige el cliente real o el simulado).
 
 import * as Crypto from 'expo-crypto';
 
@@ -22,7 +29,7 @@ import type { ApiErrorCode, LoginResponse } from '../api/dto';
 import { CONFIG } from '../config';
 import { canLogout } from '../domain/rules';
 import { nowIso, nowMs } from '../domain/time';
-import { MOBILE_ALLOWED_ROLES, type AuthStatus } from '../domain/types';
+import { MOBILE_ALLOWED_ROLES, type AuthStatus, type UserProfile } from '../domain/types';
 import { deviceInfoDto, getDeviceIdentity } from '../device/deviceIdentity';
 import { logEvent } from '../diagnostics/eventLog';
 import { getMeta, setMeta } from '../storage/repositories/appMetaRepo';
@@ -54,8 +61,53 @@ export type AuthResult =
   | { ok: true; status: AuthStatus; mode: 'ONLINE' | 'OFFLINE' }
   | { ok: false; code: string; until?: string; fieldErrors?: { field: string; message: string }[] };
 
-/** Códigos que significan "esta sesión ya no vale": se revoca (7.8). */
-const REVOKE_CODES: readonly ApiErrorCode[] = ['REFRESH_INVALID', 'ACCOUNT_BLOCKED', 'DEVICE_REVOKED', 'ROLE_NOT_ALLOWED'];
+/**
+ * Códigos que significan "esta sesión ya no vale": se revoca (7.8). ACCOUNT_PENDING y ACCOUNT_REJECTED los responde
+ * Django (ensure_app_access) si el administrador cambió el estado de la cuenta después del login.
+ */
+export const REVOKE_CODES: readonly ApiErrorCode[] = [
+  'REFRESH_INVALID',
+  'ACCOUNT_BLOCKED',
+  'ACCOUNT_PENDING',
+  'ACCOUNT_REJECTED',
+  'DEVICE_REVOKED',
+  'ROLE_NOT_ALLOWED',
+];
+
+// ------------------------------------------------------------------ hora del servidor
+
+/** Hora del servidor − hora del celular (ms). Se mide en cada respuesta con serverTime. */
+let clockOffsetMs = 0;
+
+/** Hora del servidor estimada. Los vencimientos que emite Django se comparan contra ella. */
+export function serverNowMs(): number {
+  return nowMs() + clockOffsetMs;
+}
+
+export function getClockOffsetMs(): number {
+  return clockOffsetMs;
+}
+
+/** Registra la hora del servidor de una respuesta (login, refresh, health, bootstrap). */
+export function noteServerTime(serverTime: string | null | undefined): void {
+  const t = serverTime ? Date.parse(serverTime) : Number.NaN;
+  if (!Number.isFinite(t)) return;
+  const offset = Math.round(t - nowMs());
+  const changed = Math.abs(offset - clockOffsetMs) > 1_000;
+  clockOffsetMs = offset;
+  if (!changed) return;
+  if (Math.abs(offset) > CONFIG.auth.clockSkewWarnSeconds * 1000) {
+    logEvent('WARN', 'NET', 'SERVER_CLOCK_OFFSET', { offsetMs: offset });
+  }
+  setMeta('server_clock_offset_ms', String(offset)).catch(() => undefined);
+}
+
+/** Al arrancar (src/boot.ts): último desfase conocido, útil aunque no haya internet. */
+export async function loadClockOffset(): Promise<void> {
+  const raw = await getMeta('server_clock_offset_ms');
+  const n = raw === null ? Number.NaN : Number(raw);
+  if (Number.isFinite(n)) clockOffsetMs = n;
+}
 
 /** Callback opcional para mostrar "Preparando acceso sin internet…" mientras se deriva el verificador. */
 export type PhaseListener = (phase: 'CONNECTING' | 'PREPARING_OFFLINE' | 'CHECKING_OFFLINE') => void;
@@ -73,6 +125,7 @@ async function applyOnlineLogin(
   askRole = true,
 ): Promise<AuthResult> {
   const roleChoice = askRole ? { roleChoicePending: true } : {};
+  noteServerTime(res.serverTime);
   const now = nowIso();
   await saveTokens(res, res.user.id);
   await upsertUser(res.user, now);
@@ -240,7 +293,7 @@ export async function restoreSession(): Promise<void> {
     mustChangePassword: u.mustChangePassword,
   };
   const tokens = await loadTokens();
-  const refreshValid = !!tokens && new Date(tokens.refreshTokenExpiresAt).getTime() > nowMs();
+  const refreshValid = !!tokens && Date.parse(tokens.refreshTokenExpiresAt) > serverNowMs();
 
   if (mode === 'ONLINE' && refreshValid) {
     store.set({
@@ -275,16 +328,42 @@ export async function restoreSession(): Promise<void> {
 
 // ------------------------------------------------------------------ token de acceso y revocación
 
-/** Devuelve un access token vigente (renovándolo si hace falta). null si la sesión es OFFLINE. */
+/**
+ * Devuelve un access token vigente (lo renueva si vence en menos de auth.refreshMarginSeconds). null si no hay tokens
+ * (sesión OFFLINE) o si la renovación revocó el acceso (7.8). Lanza ApiError si no se pudo renovar por falta de red o
+ * por un error del servidor: el llamador decide (la sincronización reintenta más tarde).
+ */
 export async function getAccessToken(): Promise<string | null> {
   const tokens = await loadTokens();
   if (!tokens) return null;
   const marginMs = CONFIG.auth.refreshMarginSeconds * 1000;
-  if (new Date(tokens.accessTokenExpiresAt).getTime() - marginMs > nowMs()) return tokens.accessToken;
+  const expiresAt = Date.parse(tokens.accessTokenExpiresAt);
+  if (Number.isFinite(expiresAt) && expiresAt - marginMs > serverNowMs()) return tokens.accessToken;
+  return refreshAccessToken();
+}
+
+let refreshing: Promise<string | null> | null = null;
+
+/** Renueva el par de tokens aunque el access token parezca vigente (p. ej. el servidor respondió 401). */
+export function refreshAccessToken(): Promise<string | null> {
+  if (!refreshing) {
+    refreshing = doRefresh().finally(() => {
+      refreshing = null;
+    });
+  }
+  return refreshing;
+}
+
+async function doRefresh(): Promise<string | null> {
+  const tokens = await loadTokens();
+  if (!tokens) return null;
   try {
+    // Siempre el refresh MÁS RECIENTE (si otra renovación terminó antes, ya se guardó el nuevo).
     const res = await authApi.refresh({ refreshToken: tokens.refreshToken, deviceId: getDeviceIdentity().deviceId });
+    noteServerTime(res.serverTime);
     await saveTokens(res, res.user.id);
     await upsertUser(res.user, nowIso());
+    refreshSessionUser(res.user);
     logEvent('INFO', 'AUTH', 'REFRESH_OK');
     return res.accessToken;
   } catch (err) {
@@ -293,6 +372,32 @@ export async function getAccessToken(): Promise<string | null> {
       return null;
     }
     throw err;
+  }
+}
+
+/** El perfil que devuelve el servidor (roles, nombre) reemplaza al de la pantalla si es el mismo usuario. */
+function refreshSessionUser(user: UserProfile): void {
+  const s = useAppSession.getState();
+  if (s.user && s.user.id === user.id) {
+    s.set({ user: { ...s.user, fullName: user.fullName, roles: user.roles, status: user.status } });
+  }
+}
+
+/**
+ * Llama a la API con un token vigente. Ante 401 TOKEN_EXPIRED (reloj del celular mal puesto o token revocado por el
+ * servidor) renueva UNA vez y repite (RENOVAR_TOKEN). Sin tokens o con el acceso revocado lanza ApiError
+ * REFRESH_INVALID; los demás errores se propagan tal cual.
+ */
+export async function callWithToken<T>(call: (token: string) => Promise<T>): Promise<T> {
+  const token = await getAccessToken();
+  if (!token) throw new ApiError('HTTP', 401, 'REFRESH_INVALID');
+  try {
+    return await call(token);
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 401 || err.code !== 'TOKEN_EXPIRED') throw err;
+    const fresh = await refreshAccessToken();
+    if (!fresh) throw new ApiError('HTTP', 401, 'REFRESH_INVALID');
+    return call(fresh);
   }
 }
 
@@ -326,13 +431,19 @@ export async function logout(hasOpenMonitoringSession: boolean): Promise<AuthRes
 // ------------------------------------------------------------------ contraseña (7.6, 7.7) y registro (7.3)
 
 export async function changePassword(current: string, next: string): Promise<AuthResult> {
-  const token = await getAccessToken().catch(() => null);
-  if (!token) return { ok: false, code: 'SIN_INTERNET' };
+  // Una sesión OFFLINE no tiene tokens: primero se valida la contraseña con internet (7.5).
+  if (useAppSession.getState().mode !== 'ONLINE') return { ok: false, code: 'REAUTENTICACION_REQUERIDA' };
   try {
-    await authApi.changePassword({ currentPassword: current, newPassword: next }, token, getDeviceIdentity().deviceId);
+    await callWithToken((token) =>
+      authApi.changePassword({ currentPassword: current, newPassword: next }, token, getDeviceIdentity().deviceId),
+    );
   } catch (err) {
     if (err instanceof ApiError && err.isNetwork) return { ok: false, code: 'SIN_INTERNET' };
-    return { ok: false, code: err instanceof ApiError && err.code ? err.code : 'ERROR_INESPERADO' };
+    if (err instanceof ApiError && err.code === 'INVALID_CREDENTIALS') return { ok: false, code: 'CONTRASENA_ACTUAL_INCORRECTA' };
+    const code = err instanceof ApiError && err.code ? err.code : 'ERROR_INESPERADO';
+    if (REVOKE_CODES.includes(code as ApiErrorCode) && code !== 'REFRESH_INVALID') await revoke(code);
+    logEvent('WARN', 'AUTH', 'CHANGE_PASSWORD_FAIL', { code });
+    return { ok: false, code, fieldErrors: err instanceof ApiError ? err.fieldErrors : undefined };
   }
   const s = useAppSession.getState();
   if (s.user) {
@@ -344,6 +455,7 @@ export async function changePassword(current: string, next: string): Promise<Aut
       offlineValidUntil: offlineValidUntil(nowIso(), CONFIG.auth.offlineLoginMaxDays),
     });
   }
+  logEvent('INFO', 'AUTH', 'PASSWORD_CHANGED');
   return { ok: true, status: 'AUTENTICADO', mode: 'ONLINE' };
 }
 
@@ -394,7 +506,8 @@ export async function requestPasswordReset(email: string): Promise<AuthResult> {
 export async function checkBackend(passActive: boolean): Promise<boolean> {
   let online = false;
   try {
-    await authApi.health();
+    const h = await authApi.health();
+    noteServerTime(h.serverTime);
     online = true;
   } catch {
     online = false;

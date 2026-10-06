@@ -2,12 +2,15 @@
 //
 // QUÉ HACE: crea la fila en `incidents` y deja rastro en event_log. Las pantallas usan addManualIncident;
 // el controlador usa addSystemIncident ante desconexiones, errores de calidad, batería, espacio, etc.
+// Fase 4: si la sesión ya estaba cerrada y su lote de incidencias ya se había enviado, el lote vuelve a la cola para
+// que la incidencia nueva también llegue a la plataforma (reopenIncidentBatch).
 
 import { newId } from '../domain/ids';
 import { nowIso } from '../domain/time';
 import type { Incident, IncidentSeverity, IncidentType } from '../domain/types';
 import type { Db } from '../storage/db';
 import { insertIncident, listIncidents } from '../storage/repositories/incidentRepo';
+import { reopenIncidentBatch } from '../storage/repositories/syncQueueRepo';
 import { logEvent } from './eventLog';
 
 export interface IncidentRefs {
@@ -40,6 +43,7 @@ async function add(
     createdBy,
   };
   await insertIncident(inc, db);
+  await reopenIncidentBatch(refs.sessionId, db);
   logEvent(severity === 'ERROR' ? 'ERROR' : 'INFO', 'SESSION', 'INCIDENT', { type, severity, createdBy }, refs.sessionId);
   return inc;
 }

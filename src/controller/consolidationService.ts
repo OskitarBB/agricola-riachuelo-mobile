@@ -8,7 +8,8 @@
 //  4) Mueve la foto a captures/{sesión}/{pasada}/{captureId}.jpg (o short-test/…), registra captura y calidad,
 //     actualiza el resultado de la cámara en la secuencia (OK_RECIBIDA) y los contadores de la pasada.
 //  5) Foto tardía de una sesión cerrada (8.13): se acepta, se encola para sincronizar y la sesión SYNCED vuelve a CLOSED.
-// INTEGRACIÓN FUTURA: desde aquí la foto queda en remote_sync_status = PENDIENTE_NUBE para subirla a S3 vía Spring Boot.
+// Desde aquí la foto queda en remote_sync_status = PENDIENTE_NUBE: src/sync/syncService.ts la sube a Cloudinary con un
+// ticket firmado por la plataforma Django y la confirma en /api/v1/captures/upload (Fase 4).
 
 import { nowIso } from '../domain/time';
 import type { CameraRole, Capture, QualityResult } from '../domain/types';

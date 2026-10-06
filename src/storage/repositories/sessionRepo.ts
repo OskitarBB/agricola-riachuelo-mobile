@@ -278,3 +278,32 @@ export async function releaseRole(sessionId: string, role: CameraRole, db: Db = 
 export async function markAllDisconnected(sessionId: string, db: Db = getDb()): Promise<void> {
   await db.runAsync("UPDATE session_devices SET link_status = 'DESCONECTADA' WHERE session_id = ?", [sessionId]);
 }
+
+// ------------------------------------------------------------------ sincronización (Fase 4)
+
+/** Estado de la sesión respecto de la plataforma (no cambia `status`). */
+export async function setSessionRemoteStatus(sessionId: string, status: RemoteSyncStatus, db: Db = getDb()): Promise<void> {
+  await db.runAsync('UPDATE monitoring_sessions SET remote_sync_status = ?, updated_at = ? WHERE session_id = ?', [
+    status,
+    nowIso(),
+    sessionId,
+  ]);
+}
+
+/**
+ * CLOSED → SYNCED (§15.5 paso 6): todos los elementos de la cola están HECHO. Marca SINCRONIZADO la sesión, sus pasadas,
+ * secuencias e incidencias en una transacción (la llama syncService dentro de inTransaction).
+ */
+export async function markSessionSynced(sessionId: string, db: Db = getDb()): Promise<void> {
+  const now = nowIso();
+  await db.runAsync(
+    "UPDATE monitoring_sessions SET status = 'SYNCED', remote_sync_status = 'SINCRONIZADO', updated_at = ? WHERE session_id = ? AND status = 'CLOSED'",
+    [now, sessionId],
+  );
+  await db.runAsync("UPDATE monitoring_passes SET remote_sync_status = 'SINCRONIZADO', updated_at = ? WHERE session_id = ?", [
+    now,
+    sessionId,
+  ]);
+  await db.runAsync("UPDATE capture_sequences SET remote_sync_status = 'SINCRONIZADO' WHERE session_id = ?", [sessionId]);
+  await db.runAsync("UPDATE incidents SET remote_sync_status = 'SINCRONIZADO' WHERE session_id = ?", [sessionId]);
+}

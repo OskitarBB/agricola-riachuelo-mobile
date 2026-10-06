@@ -6,6 +6,7 @@ const expoConfig = require('eslint-config-expo/flat');
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ['dist/*', 'node_modules/*', '.expo/*'],
+    // tools/verificacion: pruebas de contrato que corren en Node (npx tsx), fuera del bundle de la app.
+    ignores: ['dist/*', 'node_modules/*', '.expo/*', 'tools/**'],
   },
 ]);

@@ -49,7 +49,19 @@ describe('decideRoleChange (RN-15 en PANT-08)', () => {
     expect(decideRoleChange({ ...base, pendingSync: 12 })).toEqual({ kind: 'ALLOWED', warnings: ['SINCRONIZACION_PENDIENTE'] });
     expect(decideRoleChange({ ...base, pendingSync: 12, syncAvailable: true })).toEqual({
       kind: 'BLOCKED',
-      code: 'CAMBIO_FUNCION_BLOQUEADO',
+      code: 'CAMBIO_FUNCION_SINCRONIZACION_PENDIENTE',
+    });
+  });
+
+  test('Fase 4: los errores definitivos no bloquean (no se vaciarían solos), solo avisan', () => {
+    expect(decideRoleChange({ ...base, syncAvailable: true, syncErrors: 3 })).toEqual({
+      kind: 'ALLOWED',
+      warnings: ['CAMBIO_FUNCION_ERRORES_SINCRONIZACION'],
+    });
+    // Con pendientes, el bloqueo manda aunque también haya errores.
+    expect(decideRoleChange({ ...base, syncAvailable: true, pendingSync: 1, syncErrors: 3 })).toEqual({
+      kind: 'BLOCKED',
+      code: 'CAMBIO_FUNCION_SINCRONIZACION_PENDIENTE',
     });
   });
 });

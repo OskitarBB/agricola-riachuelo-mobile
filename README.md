@@ -1,4 +1,4 @@
-# Riachuelo Monitoreo — App móvil (Fases 0 a 3)
+# Riachuelo Monitoreo — App móvil (Fases 0 a 4 · v0.4.0)
 
 App móvil del sistema de monitoreo fitosanitario de vid de **Agrícola Riachuelo** (Curso Integrador II).
 Un celular **controlador** dirige a dos celulares **cámara** que toman fotos sincronizadas de los dos laterales
@@ -10,7 +10,13 @@ de la hilera. Construida con **Expo SDK 57**, Expo Router, TypeScript estricto y
 | 1 | Login (online y sin internet), registro, recuperación, cambio de contraseña, función del dispositivo, permisos | ✅ |
 | 2 | Vinculación por QR, protocolo local v1 (WebSocket + HTTP), prueba corta, simulador con 2 cámaras virtuales | ✅ |
 | 3 | Sesión, pasadas, marcadores, captura MANUAL/AUTOMÁTICO, calidad técnica, repetición, cierre y resumen | ✅ |
-| 4 | Sincronización con el backend web y la base de datos central | ⏳ Pendiente (la UI muestra "Pendiente") |
+| 4 | Sincronización con la plataforma Django (`/api/v1`): sesiones, pasadas, secuencias, incidencias y fotos por ticket directo a Cloudinary; reintentos, fotos tardías, sincronización automática con Wi-Fi | ✅ v0.4.0 |
+| 5 | Validación en iPhone (las tres funciones) | ⏳ Siguiente |
+| 6 | Campo y versión del piloto (3 Android) | ⏳ |
+
+**Arquitectura:** la app habla **solo con la plataforma Django por HTTPS** (`https://monitoreo.agricolariachuelo.org/api/v1`).
+Django guarda los datos en Supabase y firma un *ticket* para que la app suba cada foto **directo a Cloudinary**. La app
+nunca usa claves de Supabase ni de Cloudinary. El análisis con IA (YOLO) corre en el servidor.
 
 ---
 
@@ -108,10 +114,20 @@ Al terminar, EAS da un enlace/QR para descargar el `.apk`; instálalo en los cel
 ```bash
 npm run typecheck    # TypeScript estricto
 npm run lint         # ESLint (eslint-config-expo)
-npm test             # Jest: dominio, reglas, protocolo, WebSocket, HTTP, auth, reintentos, calidad y función del celular
+npm test             # Jest: dominio, reglas, protocolo, WebSocket, HTTP, auth, reintentos (E.7), subida a Cloudinary
+                     # (E.8), planificador y datos de la sincronización, calidad, configuración y función del celular
 npm run validate     # las tres anteriores
 npm run doctor       # expo-doctor (requiere internet)
 ```
+
+Pruebas de contrato con la plataforma (código real de `src/` en Node, Node 22.5+): ver `tools/verificacion/README.md`.
+
+```bash
+npx tsx --tsconfig tools/verificacion/tsconfig.json tools/verificacion/simulado.ts      # sin servidor
+npx tsx --tsconfig tools/verificacion/tsconfig.json tools/verificacion/integracion.ts   # plataforma en la laptop
+```
+
+Resultados de la v0.4.0: `docs/evidencias/fase4_integracion.md`.
 
 ## 6. Estructura
 
@@ -127,28 +143,76 @@ src/camera/          Agente de cámara, captura, cola de transferencia, retenci�
 src/device/          Cámara, GPS, batería, red, estabilidad (sensores), calidad de imagen, galería
 src/auth/            Login online/offline, tokens, validaciones
 src/storage/         SQLite (migraciones + repositorios), SecureStore, archivos
-src/api/             Cliente HTTP y backend simulado (mock) — se reemplaza por la API web en Fase 4
-src/sync/            Cola de sincronización (Fase 4: pendiente) y política de reintentos
+src/api/             Cliente de la plataforma Django /api/v1, subida directa a Cloudinary con ticket y backend simulado
+src/sync/            Sincronización (Fase 4): motor, planificador, datos del contrato, reintentos y subida de fotos
+tools/verificacion/  Pruebas de contrato en Node contra la plataforma (no van en el APK)
 src/ui/              Tema, textos (strings.ts / messages.ts), sonidos/vibración y componentes animados
 __tests__/           Pruebas Jest
 docs/                ADR, cambios, evidencias y documentos de referencia (maestro y contexto)
 ```
 
-Cada archivo empieza con un comentario **QUÉ HACE** y, cuando aplica, **INTEGRACIÓN FUTURA** (qué cambia
-al conectar la web/base de datos). Busca `INTEGRACIÓN FUTURA` o `Fase 4` para ver los puntos de conexión.
+Cada archivo empieza con un comentario **QUÉ HACE** y, cuando aplica, qué parte del contrato con la plataforma usa.
 
-## 7. Conectar con el backend real (Fase 4)
+## 7. Conectar con la plataforma (Fase 4)
 
-1. Copia `.env.example` a `.env` y define `EXPO_PUBLIC_API_URL=https://...` y `EXPO_PUBLIC_USE_MOCK_API=0`.
-2. `src/api/index.ts` elige automáticamente el cliente real (`authApi`, `bootstrapApi`, `syncApi`).
-3. Implementar `src/sync/syncService.ts` (hoy devuelve "Pendiente") siguiendo el orden padre → hijo del maestro.
+### APK del piloto (3 celulares Android)
+
+```bash
+npm run build:apk:piloto     # perfil "piloto": https://monitoreo.agricolariachuelo.org, sin backend simulado
+```
+
+- Los **tres** celulares deben tener la **misma versión** (0.4.0): en `piloto` la vinculación lo exige (RN-17).
+- Las cuentas de los operadores se crean desde la app (*Crear cuenta*) y el administrador las aprueba en la web con
+  el rol «Operador de campo». El administrador también puede usar la app.
+- Primer uso del controlador: *Catálogos › Actualizar* (con internet) para bajar lotes, hileras y marcadores reales.
+
+### Probar con la plataforma en la laptop o con el piloto desde Expo Go
+
+Crea `.env` (ver `.env.example`):
+
+```bash
+EXPO_PUBLIC_API_URL=http://<IP-de-la-laptop>:8000     # o https://monitoreo.agricolariachuelo.org
+EXPO_PUBLIC_USE_MOCK_API=0
+EXPO_PUBLIC_APP_ENV=dev
+```
+
+Login, catálogos, sincronización y Ajustes › *Probar conexión* funcionan en Expo Go (el controlador usa las cámaras
+simuladas). En la laptop: `python manage.py runserver 0.0.0.0:8000` y `sembrar_demo` para las cuentas `@demo.pe`.
+
+### Qué hace la sincronización (PANT-20, Controlador › Sincronizar)
+
+1. Al **cerrar una sesión** se arma la cola: sesión → pasadas → secuencias (lotes de 200) → fotos → incidencias →
+   cierre. Nada se borra del celular.
+2. **«Sincronizar ahora»** (con internet y acceso validado con internet): envía todo en orden; cada foto pide un
+   ticket a Django, se sube **directo a Cloudinary** y se confirma en Django. Muestra el avance (permiso de subida,
+   subida, confirmación y MB) y se puede **Detener**. Con datos móviles pide confirmación con el tamaño.
+3. **Automática:** con la app abierta, Wi-Fi y sin una sesión de monitoreo abierta (al volver el internet, al volver
+   a la app, al cerrar una sesión y cada 5 minutos).
+4. Errores: la red o el servidor caído **no** cuentan como intento (se reintenta con espera: 1, 5, 15, 60 min).
+   Los errores que necesitan revisión (p. ej. `FOTO_DEMASIADO_GRANDE`, `CAPTURE_CONFLICT`) se ven con su código y
+   «Reintentar errores» los vuelve a la cola. Una sesión queda **Sincronizada** cuando todo llegó; una foto tardía
+   la vuelve a abrir hasta enviarla.
+5. Con datos pendientes el controlador **no puede cambiar de función** (RN-15); con errores solo se avisa.
+
+### IA (YOLO)
+
+La app no necesita cambios para la IA: su trabajo termina cuando Django confirma la foto (SINCRONIZADO). Django crea
+la tarea de análisis en la misma transacción (solo fotos UTILIZABLE o PENDIENTE_REVISION_TECNICA) y el *worker* de la
+plataforma la procesa. Mientras no haya un modelo activo, las fotos quedan esperando; al activar el modelo entrenado
+en el servidor (`deploy/modelos/modelo.onnx` + configuración activa en `/gestion/`), el worker encola y analiza todas
+las fotos pendientes, incluidas las ya sincronizadas. Los resultados se revisan en la web: la API nunca devuelve
+resultados de IA ni URLs de fotos a la app (maestro §28.10).
 
 ## 8. Limitaciones conocidas
 
 - **Expo Go no puede ser controlador real** (sin sockets TCP): usa el simulador. El APK sí.
+- La sincronización corre **con la app abierta** (no en segundo plano). Durante «Sincronizar ahora» la pantalla
+  se mantiene encendida.
 - `react-native-tcp-socket` es una librería comunitaria; si fallara con la Nueva Arquitectura de RN 0.86,
   la alternativa documentada es la opción B (ver `docs/adr/0003-red-local.md`).
 - Los umbrales de calidad (perfil Q0) y de estabilidad son iniciales y se calibran en campo
-  (`src/config/defaults.ts`).
+  (`src/config/defaults.ts`). Si la plataforma publica un perfil de calidad, el controlador lo aplica y lo pasa a
+  las cámaras.
+- Pendiente en el piloto: CP-38 y CP-41 con Cloudinary real y la prueba de campo con 3 celulares Android.
 - iOS: la vinculación real no se probó (el piloto es Android); Expo Go en iPhone sirve para login, simulador,
-  modo prueba de cámara y galería.
+  sincronización, modo prueba de cámara y galería (Fase 5).

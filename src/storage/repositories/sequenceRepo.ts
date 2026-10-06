@@ -177,3 +177,28 @@ export async function markPendingAsNoResponse(passId: string, db: Db = getDb()):
     [passId],
   );
 }
+
+/** Fase 4: secuencias de la pasada → estado respecto de la plataforma (SEQUENCE_BATCH enviado o reabierto). */
+export async function setSequencesRemoteStatus(passId: string, status: RemoteSyncStatus, db: Db = getDb()): Promise<void> {
+  await db.runAsync('UPDATE capture_sequences SET remote_sync_status = ? WHERE pass_id = ?', [status, passId]);
+}
+
+/** IDs de las secuencias de evidencia de la sesión (para no enviar incidencias con referencias inexistentes). */
+export async function listSequenceIdsOfSession(sessionId: string, db: Db = getDb()): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ sequence_id: string }>('SELECT sequence_id FROM capture_sequences WHERE session_id = ?', [
+    sessionId,
+  ]);
+  return new Set(rows.map((r) => r.sequence_id));
+}
+
+/** IDs de las secuencias de varias pasadas (las que el servidor ya recibió en su SEQUENCE_BATCH). */
+export async function listSequenceIdsOfPasses(passIds: readonly string[], db: Db = getDb()): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (const passId of passIds) {
+    const rows = await db.getAllAsync<{ sequence_id: string }>('SELECT sequence_id FROM capture_sequences WHERE pass_id = ?', [
+      passId,
+    ]);
+    for (const r of rows) out.add(r.sequence_id);
+  }
+  return out;
+}

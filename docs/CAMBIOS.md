@@ -1,3 +1,88 @@
+# Informe de avance — App móvil v0.4.0 · Fase 4 (formato maestro §23.2)
+
+**Tarea:** T-20 — Cola de sincronización con la plataforma Django y subida directa a Cloudinary.
+**Fecha:** 2026-10-06 · **Configuración:** CFG-4 · **Esquema SQLite:** 4 (migraciones 001–004) · **ADR:** 0006, 0007
+
+## Hecho
+- **Sincronización real** con `https://monitoreo.agricolariachuelo.org/api/v1` (`src/sync/syncService.ts`):
+  health → sesión ONLINE → token vigente → sesión (CLOSING) → pasadas → secuencias (lotes ≤ 200) → fotos → incidencias
+  (lotes ≤ 200) → cierre (CLOSED). Padres antes que hijos (`syncPlanner.ts`), idempotencia por ID, reintentos con
+  espera (la falta de red no cuenta), `SINCRONIZAR_PADRE`, `REPETIR_SUBIDA`, errores definitivos visibles, sesión
+  SYNCED cuando todo llegó, fotos e incidencias tardías.
+- **Fotos por ticket v2.0:** ticket a Django → subida directa a Cloudinary con `File.upload` del SDK 57 (sin
+  cabeceras de la API, original sin recomprimir) → confirmación JSON. `remote_uploads` (migración 003) evita volver a
+  subir si la app se cierra antes de confirmar. Modo `MULTIPART` (v1) disponible por configuración (S-07).
+- **PANT-20 completa:** servidor y estado, avance en vivo (permiso de subida / subida / confirmación y MB),
+  «Sincronizar ahora» (con datos móviles pide confirmación con el tamaño), «Detener», «Reintentar errores», por
+  sesión: enviados, pendientes, errores con su código y texto, fotos en la nube / por confirmar / con error.
+- **Sincronización automática** (S-08): con la app abierta, Wi-Fi, función Controlador y sin sesión abierta.
+- **Autenticación con Django:** una sola renovación de tokens a la vez (rotación de SimpleJWT), vencimientos con la
+  hora del servidor, renovar y repetir ante 401, revocación ante cuenta o celular desactivados (también
+  ACCOUNT_PENDING / ACCOUNT_REJECTED), motivos de la política de contraseña de Django en el cambio de contraseña.
+- **Catálogos reales:** migración 004 (códigos de segmento y marcador repetidos entre hileras) y perfil de calidad
+  guardado y reaplicado al arrancar.
+- **RN-15:** con datos por sincronizar el controlador no cambia de función; los errores definitivos solo avisan.
+- **Otros:** Ajustes › *Servidor* y *Probar conexión*; panel del controlador con el estado de la sincronización;
+  galería con «En la nube / Por subir / Error al subir»; diagnóstico con servidor, desfase de reloj, última
+  sincronización y elementos con error (con traceId); filas de fotos pendientes con el lateral y el usuario reales;
+  el código latente de ciclos (CFG-3) compila y su prueba pasa.
+- **Versión:** app 0.4.0 (Android versionCode 3, iOS build 3); perfil EAS `piloto` apuntando al servidor real.
+
+## Archivos creados o modificados
+- Nuevos: `src/sync/{syncPlanner,syncPayloads,syncStore,captureUploader}.ts`, `src/api/{uploadApi,cloudinaryUpload,
+  cloudinaryResponse}.ts`, `src/api/mock/mockCloudinary.ts`, `src/domain/syncQueue.ts`,
+  `src/storage/migrations/{003_remote_uploads,004_catalog_codes}.ts`, `src/storage/repositories/remoteUploadRepo.ts`,
+  `__tests__/{captureUploader,syncPlanner,syncPayloads}.test.ts`, `tools/verificacion/*`, ADR 0006 y 0007,
+  `docs/evidencias/fase4_integracion.md`.
+- Modificados: `src/sync/{syncService,syncQueue,retry}.ts`, `src/api/*` (cliente Django, DTO, simulado),
+  `src/auth/{authService,tokenStore}.ts`, `src/config/*` (CFG-4, URL del servidor), repositorios (sesiones, pasadas,
+  secuencias, capturas, incidencias, cola, catálogos, app_meta), `src/boot.ts`, `src/device/{networkMonitor,
+  deviceRole,keepAwake,galleryService}.ts`, `src/domain/{rules,types,coverage}.ts`, `src/controller/{catalogService,
+  controllerRuntime,…}.ts`, `src/diagnostics/*`, `src/ui/{messages,strings,theme}.ts`, pantallas `controller/sync`,
+  `controller/index`, `controller/session-summary`, `settings`, `change-password`, `gallery`, `(setup)/role`,
+  `app.json`, `eas.json`, `package.json`, `.env.example`, `tsconfig.json`, `eslint.config.js`, README, AGENTS.
+
+## Cómo probar
+1. `npm install` y `npm run validate`.
+2. Demostración sin servidor: `npm start` (backend simulado) → Controlador → sesión → cerrar → *Sincronizar*.
+3. Con la plataforma en la laptop o el piloto: `.env` con `EXPO_PUBLIC_API_URL` y `EXPO_PUBLIC_USE_MOCK_API=0`
+   (README §7), login con un operador aprobado, *Catálogos › Actualizar*, una sesión corta y *Sincronizar ahora*.
+   La sesión aparece en la web y las fotos en la bandeja (con IA cuando haya modelo activo).
+4. APK del piloto: `npm run build:apk:piloto` e instalar en los **tres** celulares (misma versión, RN-17).
+5. Contrato en Node: `tools/verificacion/README.md`.
+
+## Resultado de typecheck / lint / test
+- `tsc --noEmit` (estricto, tipos reales de React 19, RN 0.86, Expo SDK 57, zod 4, zustand 5): **0 errores**.
+- Pruebas: **111 OK** en 13 suites (incluye E.7 y E.8 del maestro).
+- Integración con la plataforma Django real (local, Cloudinary simulado del servidor): **29/29 pasos OK**;
+  backend simulado con fallos inyectados: **9/9**; actualización de una base v0.2/v0.3: **OK**
+  (`docs/evidencias/fase4_integracion.md`).
+- `expo lint` y `jest-expo` no se pudieron ejecutar en el entorno de desarrollo (sin acceso al registro de npm):
+  correr `npm run validate` antes de compilar el APK.
+
+## Criterios de aceptación (T-20)
+- Pruebas E.7 y E.8 en Jest: **cumplido**.
+- CP-26, CP-27, CP-28, CP-29, CP-33, CP-35, CP-39, CP-40, CP-42, CP-43, CP-44: **cumplidos** contra Django
+  (local) o el simulado (ver evidencia).
+- CP-38 y CP-41 con Cloudinary real: **pendientes** (se prueban en el piloto con una cuenta de operador aprobada).
+
+## Supuestos tomados
+- **S-07** `sync.uploadMode` = TICKET por defecto; MULTIPART solo como respaldo.
+- **S-08** sincronización automática solo con Wi-Fi, app abierta y sin sesión abierta; `autoSyncIntervalMs` 5 min;
+  `maxConsecutiveFailures` 3.
+- Elementos con un padre en error definitivo pasan a error con código propio (no bloquean el cierre ni RN-15).
+- ACCOUNT_PENDING / ACCOUNT_REJECTED (403) se tratan como REQUIERE_LOGIN y revocan el acceso (C.3 sin cambios).
+
+## Preguntas para el equipo
+- ¿Una cuenta de operador aprobada en el piloto para la prueba real (CP-38, CP-41)?
+- ¿Ya se puede poner `API_SUBIDA_MULTIPART=false` en el servidor cuando los tres celulares tengan la v0.4.0?
+- Catálogos reales (códigos de segmentos y marcadores) y el modelo YOLO entrenado (lo activa la plataforma).
+
+## Siguiente tarea sugerida
+T-21 (Fase 5, iPhone) y, en paralelo, la prueba de campo con los tres Android y el APK `piloto`.
+
+---
+
 # Informe de avance — App móvil v0.2.0 (formato maestro §23.2)
 
 **Fecha:** 2026-10-02 · **Fases entregadas:** 0, 1, 2 y 3 · **Configuración:** CFG-2

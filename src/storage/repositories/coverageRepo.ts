@@ -3,7 +3,7 @@
 // QUÉ HACE: lee y escribe monitoring_cycles, session_planned_lots y uncovered_areas en el CONTROLADOR.
 // Las reglas (qué está bloqueado, qué falta, quién puede abrir un ciclo) NO están aquí: están en
 // src/domain/coverage.ts y las orquesta src/controller/cycleService.ts.
-// INTEGRACIÓN FUTURA (Fase 4): el ciclo vigente vendrá del backend (bootstrap) y estas tablas actuarán
+// PENDIENTE EN LA PLATAFORMA (CFG-3): el ciclo vigente vendrá del bootstrap y estas tablas actuarán
 // como caché local; uncovered_areas se enviará con INCIDENT_BATCH y se marcará SINCRONIZADO.
 
 import type { LateralCode, MonitoringCycle, UncoveredArea, UncoveredKind, UncoveredReason } from '../../domain/types';

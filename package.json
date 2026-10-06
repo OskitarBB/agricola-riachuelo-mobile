@@ -1,6 +1,6 @@
 {
   "name": "riachuelo-mobile",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@noble/hashes": "1.8.0",
@@ -67,7 +67,8 @@
     "doctor": "npx expo-doctor@latest",
     "validate": "npm run typecheck && npm run lint && npm test",
     "build:apk": "npx eas-cli@latest build -p android --profile preview",
-    "build:apk:dev": "npx eas-cli@latest build -p android --profile development"
+    "build:apk:dev": "npx eas-cli@latest build -p android --profile development",
+    "build:apk:piloto": "npx eas-cli@latest build -p android --profile piloto"
   },
   "private": true,
   "jest": {

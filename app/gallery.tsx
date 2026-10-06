@@ -2,7 +2,7 @@
 //
 // QUÉ HACE: cuadrícula animada con las fotos del almacenamiento privado (evidencia de sesión, prueba corta y
 // modo prueba), con filtros. Al tocar una foto se abre el visor a pantalla completa: se desliza entre fotos
-// (paginado horizontal) y muestra su ficha (calidad, métricas, rol, transferencia). Se puede compartir una
+// (paginado horizontal) y muestra su ficha (calidad, métricas, rol y, en el controlador, si ya está en la nube). Se puede compartir una
 // foto y borrar SOLO las fotos de prueba (las de evidencia están protegidas por RN-09).
 
 import { Image } from 'expo-image';
@@ -29,7 +29,7 @@ import { Segmented } from '../src/ui/components/Segmented';
 import { StatusPill } from '../src/ui/components/StatusPill';
 import { feedback } from '../src/ui/feedback';
 import { QUALITY_LABEL, ROLE_LABEL, S } from '../src/ui/strings';
-import { colors, font, qualityTone, radius } from '../src/ui/theme';
+import { cloudTone, colors, font, qualityTone, radius } from '../src/ui/theme';
 import { showToast } from '../src/ui/toast';
 
 type Filter = 'ALL' | PhotoKind;
@@ -179,6 +179,9 @@ export default function GalleryScreen() {
                   <StatusPill label={QUALITY_LABEL[details.quality]} tone={qualityTone(details.quality)} big />
                 ) : null}
                 {details?.role ? <Text style={styles.infoText}>{ROLE_LABEL[details.role]}</Text> : null}
+                {details?.cloud ? (
+                  <StatusPill label={S.gallery.cloud[details.cloud]} tone={cloudTone(details.cloud)} />
+                ) : null}
               </View>
               <Text style={styles.infoText}>
                 {formatDateTime(

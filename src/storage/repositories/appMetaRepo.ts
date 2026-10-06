@@ -3,6 +3,9 @@
 // QUÉ HACE: guarda datos de configuración del celular que no son secretos: device_id, device_role,
 // catalog_version, bootstrap_at, offline_failed_attempts, offline_locked_until, short_test_pending, etc.
 // Claves agregadas en esta versión (Supuesto S-05): ui_sounds, ui_haptics (preferencias de interfaz).
+// Fase 4: quality_profile_json (perfil publicado en el bootstrap, se reaplica al arrancar), server_clock_offset_ms
+// (hora del servidor − hora del celular, para medir vencimientos de tokens) y last_sync (resultado de la última
+// sincronización: fecha, código y conteos; sin datos sensibles).
 
 import { getDb, type Db } from '../db';
 
@@ -13,10 +16,13 @@ export type MetaKey =
   | 'bootstrap_at'
   | 'config_version'
   | 'quality_profile_version'
+  | 'quality_profile_json'
   | 'offline_failed_attempts'
   | 'offline_locked_until'
   | 'short_test_pending'
   | 'last_online_user_id'
+  | 'server_clock_offset_ms'
+  | 'last_sync'
   | 'ui_sounds'
   | 'ui_haptics';
 

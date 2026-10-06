@@ -1,6 +1,7 @@
 // src/storage/repositories/incidentRepo.ts — Incidencias automáticas y manuales (RF-43).
 //
-// INTEGRACIÓN FUTURA: se envían al backend en lotes (POST /sessions/{id}/incidents/batch) al sincronizar.
+// Se envían a la plataforma Django en lotes de hasta 200 (POST /api/v1/sessions/{id}/incidents/batch) al sincronizar
+// (src/sync/syncService.ts, elemento INCIDENT_BATCH).
 
 import type { Incident, IncidentSeverity, IncidentType } from '../../domain/types';
 import { getDb, type Db } from '../db';
@@ -61,4 +62,17 @@ export async function listIncidents(sessionId: string | null, db: Db = getDb()):
 export async function countIncidents(passId: string, db: Db = getDb()): Promise<number> {
   const r = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM incidents WHERE pass_id = ?', [passId]);
   return r?.n ?? 0;
+}
+
+/** Fase 4: incidencias de la sesión en orden de ocurrencia (INCIDENT_BATCH, lotes de sync.batchSize). */
+export async function listIncidentsForSync(sessionId: string, db: Db = getDb()): Promise<Incident[]> {
+  return (await listIncidents(sessionId, db)).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+}
+
+export async function setIncidentsRemoteStatus(
+  sessionId: string,
+  status: 'PENDIENTE_NUBE' | 'SUBIENDO' | 'SINCRONIZADO' | 'ERROR_SINCRONIZACION',
+  db: Db = getDb(),
+): Promise<void> {
+  await db.runAsync('UPDATE incidents SET remote_sync_status = ? WHERE session_id = ?', [status, sessionId]);
 }

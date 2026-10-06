@@ -5,8 +5,9 @@
 //    actualización de app_meta.catalog_version / bootstrap_at (maestro §12.5, RF-15).
 //  - Consultas encadenadas lote → hilera → segmento → marcador para PANT-15 y PANT-17 (RF-16, sin internet).
 //
-// INTEGRACIÓN FUTURA: los catálogos llegan de GET /api/v1/mobile/bootstrap (backend Spring Boot, que a su
-// vez los toma de PostgreSQL / la web de administración). Los códigos definitivos dependen de Q-01.
+// Los catálogos llegan de GET /api/v1/mobile/bootstrap (plataforma Django, que los toma de Supabase / la web de
+// administración). Los códigos definitivos dependen de Q-01. Los códigos de segmento y marcador pueden repetirse
+// entre hileras (migración 004, ADR 0007); el id es la clave.
 
 import type { BootstrapResponse } from '../../api/dto';
 import type { FieldRow, Lot, Marker, MarkerPosition, Segment } from '../../domain/types';
@@ -49,7 +50,9 @@ export async function replaceCatalogs(data: BootstrapResponse): Promise<void> {
     }
     await setMeta('catalog_version', data.catalogVersion, txn);
     await setMeta('bootstrap_at', nowIso(), txn);
-    if (data.qualityProfile) await setMeta('quality_profile_version', data.qualityProfile.version, txn);
+    await setMeta('quality_profile_version', data.qualityProfile?.version ?? null, txn);
+    // Se guarda el perfil completo para reaplicarlo al arrancar (src/boot.ts) aunque no haya internet.
+    await setMeta('quality_profile_json', data.qualityProfile ? JSON.stringify(data.qualityProfile) : null, txn);
   });
 }
 

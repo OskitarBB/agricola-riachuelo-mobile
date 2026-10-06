@@ -8,6 +8,7 @@ import type {
   CameraRole,
   CaptureMode,
   DeviceRole,
+  Direction,
   LateralCode,
   MonitoringPass,
   PassStatus,
@@ -133,11 +134,12 @@ export function canChangeDeviceRole(hasOpenSession: boolean, pendingTransfers: n
 }
 
 /** Aviso que PANT-08 confirma antes de cambiar la función (no bloquea). */
-export type RoleChangeWarning = 'SINCRONIZACION_PENDIENTE';
+export type RoleChangeWarning = 'SINCRONIZACION_PENDIENTE' | 'CAMBIO_FUNCION_ERRORES_SINCRONIZACION';
 
 export type RoleChangeBlockCode =
   | 'CAMBIO_FUNCION_SESION_ABIERTA'
   | 'CAMBIO_FUNCION_FOTOS_PENDIENTES'
+  | 'CAMBIO_FUNCION_SINCRONIZACION_PENDIENTE'
   | 'CAMBIO_FUNCION_BLOQUEADO';
 
 export type RoleChangeDecision =
@@ -158,6 +160,8 @@ export interface RoleChangeInput {
   pendingSync: number;
   /** false mientras la sincronización con el backend no exista (Fase 4): la cola no se puede vaciar. */
   syncAvailable: boolean;
+  /** Controlador: elementos con error definitivo (requieren revisión; no bloquean, se avisa). */
+  syncErrors?: number;
 }
 
 /**
@@ -167,18 +171,31 @@ export interface RoleChangeInput {
  *  - BLOCKED: hay una sesión de monitoreo abierta o fotos por enviar al controlador (RN-15).
  *  - ALLOWED: se puede cambiar. Con la cola hacia el backend pendiente y SIN sincronización disponible se
  *    avisa (SINCRONIZACION_PENDIENTE): esos datos se conservan en SQLite y no se pierden al cambiar.
- * Cuando la sincronización exista (syncAvailable = true) la cola pendiente vuelve a bloquear, como dice RN-15.
+ * Con la sincronización disponible (Fase 4, syncAvailable = true) la cola pendiente BLOQUEA, como dice RN-15
+ * (CAMBIO_FUNCION_SINCRONIZACION_PENDIENTE: primero «Sincronizar ahora»). Los elementos con error definitivo no
+ * bloquean (nunca se vaciarían solos): se avisa y quedan guardados en el celular para revisarlos.
  */
 export function decideRoleChange(i: RoleChangeInput): RoleChangeDecision {
   if (i.current === i.target) return { kind: 'SAME' };
   if (i.current === null) return { kind: 'ALLOWED', warnings: [] };
   if (i.hasOpenSession) return { kind: 'BLOCKED', code: 'CAMBIO_FUNCION_SESION_ABIERTA' };
   if (i.pendingTransfers > 0) return { kind: 'BLOCKED', code: 'CAMBIO_FUNCION_FOTOS_PENDIENTES' };
+  const warnings: RoleChangeWarning[] = [];
   if (i.pendingSync > 0) {
-    if (i.syncAvailable) return { kind: 'BLOCKED', code: 'CAMBIO_FUNCION_BLOQUEADO' };
-    return { kind: 'ALLOWED', warnings: ['SINCRONIZACION_PENDIENTE'] };
+    if (i.syncAvailable) return { kind: 'BLOCKED', code: 'CAMBIO_FUNCION_SINCRONIZACION_PENDIENTE' };
+    warnings.push('SINCRONIZACION_PENDIENTE');
   }
-  return { kind: 'ALLOWED', warnings: [] };
+  if ((i.syncErrors ?? 0) > 0) warnings.push('CAMBIO_FUNCION_ERRORES_SINCRONIZACION');
+  return { kind: 'ALLOWED', warnings };
+}
+
+/**
+ * CFG-3 (ADR 0004) — El LATERAL B se recorre en la dirección opuesta a la del último LATERAL A cerrado
+ * (`requiredB`, calculada por domain/coverage.ts). Sin LATERAL A cerrado (requiredB = null) no hay restricción.
+ */
+export function validatePassDirection(lateral: LateralCode, direction: Direction, requiredB: Direction | null): RuleResult {
+  if (lateral === 'LATERAL_B' && requiredB !== null && direction !== requiredB) return fail('DIRECCION_LATERAL_B');
+  return OK;
 }
 
 /** RN-19 — No se cierra la sesión de usuario con una sesión de monitoreo abierta. */

@@ -3,7 +3,7 @@
 // QUÉ HACE: pide el correo y envía la solicitud. SIEMPRE muestra el mismo mensaje neutro (no revela si el
 // correo existe). El administrador asigna una contraseña temporal en la web; al entrar con ella, la app
 // obliga a cambiarla (PANT-06). Requiere internet.
-// INTEGRACIÓN FUTURA: POST /api/v1/auth/password-reset-requests (202 siempre).
+// Plataforma Django: POST /api/v1/auth/password-reset-requests (202 siempre); el pedido aparece en la web del administrador.
 
 import { useState } from 'react';
 import { StyleSheet, Text } from 'react-native';

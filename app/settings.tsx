@@ -1,7 +1,8 @@
 // app/settings.tsx — PANT-09 Ajustes (maestro §9; RF-08, RF-09, RF-13, RF-35, RF-45).
 //
 // QUÉ HACE: muestra usuario, modo de acceso y fecha límite sin internet, función, versiones (app,
-// protocolo, perfil de calidad, configuración), entorno, espacio libre y batería. Acciones:
+// protocolo, perfil de calidad, configuración), entorno, servidor (Fase 4: plataforma Django o "Simulado"),
+// espacio libre y batería. Acciones: Probar conexión (GET /health) ·
 //  Cambiar contraseña · Cambiar función (RN-15) · Reintentar transferencias con error (cámaras) ·
 //  Exportar diagnóstico · Liberar espacio (solo según RN-09) · Fotos guardadas · Sonidos / Vibración.
 // "Cerrar sesión" está ARRIBA, en la misma zona que el título Ajustes (contexto §25.3) y respeta RN-19.
@@ -10,10 +11,11 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 
+import { checkBackend } from '../src/auth/authService';
 import { useAppSession } from '../src/auth/authStore';
 import { cameraAgent } from '../src/camera/cameraAgent';
 import { releaseControllerSyncedPhotos } from '../src/camera/retentionService';
-import { APP_VERSION, CONFIG, CONFIG_VERSION, ENV, PROTOCOL_VERSION_LABEL } from '../src/config';
+import { apiHostLabel, APP_VERSION, CONFIG, CONFIG_VERSION, ENV, isSecureApiUrl, PROTOCOL_VERSION_LABEL } from '../src/config';
 import { formatDateTime } from '../src/domain/time';
 import { batteryPct } from '../src/device/batteryService';
 import { setHapticsEnabled, setSoundsEnabled } from '../src/device/preferences';
@@ -24,6 +26,7 @@ import { AppHeader } from '../src/ui/components/AppHeader';
 import { Card } from '../src/ui/components/Card';
 import { InfoRow } from '../src/ui/components/InfoRow';
 import { Screen } from '../src/ui/components/Screen';
+import { StatusPill } from '../src/ui/components/StatusPill';
 import { feedback, getFeedbackPrefs } from '../src/ui/feedback';
 import { formatBytes, formatPct, ROLE_LABEL, S } from '../src/ui/strings';
 import { colors, font } from '../src/ui/theme';
@@ -55,6 +58,14 @@ export default function SettingsScreen() {
     const n = deviceRole === 'CONTROLADOR' ? await releaseControllerSyncedPhotos() : 0;
     showToast(S.gallery.deleted(n), 'info');
     setSpace(freeSpace());
+  };
+
+  const [testing, setTesting] = useState(false);
+  const testConnection = async () => {
+    setTesting(true);
+    const ok = await checkBackend(false);
+    setTesting(false);
+    showToast(ok ? 'CONEXION_OK' : 'BACKEND_NO_DISPONIBLE', ok ? 'success' : 'error');
   };
 
   const toggleSounds = async (on: boolean) => {
@@ -121,6 +132,15 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
+      <Card title={S.settings.server} delay={220}>
+        <InfoRow
+          label={apiHostLabel()}
+          right={<StatusPill label={online ? S.online : S.offline} tone={online ? 'ok' : 'neutral'} />}
+        />
+        {!ENV.useMockApi && !isSecureApiUrl() ? <Text style={styles.warn}>{S.settings.insecure}</Text> : null}
+        <AppButton title={S.settings.testConnection} variant="secondary" compact loading={testing} onPress={testConnection} />
+      </Card>
+
       <Card delay={250}>
         <InfoRow label={S.settings.appVersion} value={APP_VERSION} />
         <InfoRow label={S.settings.protocol} value={PROTOCOL_VERSION_LABEL} />
@@ -139,4 +159,5 @@ const styles = StyleSheet.create({
   actions: { gap: 10 },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 52 },
   switchLabel: { fontSize: font.body, color: colors.text, fontWeight: font.weightMedium },
+  warn: { color: colors.warn, fontSize: font.label, marginBottom: 8 },
 });

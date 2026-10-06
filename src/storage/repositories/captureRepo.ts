@@ -4,6 +4,8 @@
 //  - En la CÁMARA: cada foto tomada, su calidad y su estado de transferencia al controlador.
 //  - En el CONTROLADOR: cada foto recibida (o esperada) y su estado de sincronización con la nube.
 // Las filas nunca se eliminan; liberar espacio solo borra el archivo y marca file_deleted_at (RN-09).
+// Fase 4: el controlador marca remote_sync_status (PENDIENTE_NUBE → SUBIENDO → SINCRONIZADO o ERROR_SINCRONIZACION)
+// con setRemoteSyncStatus(); el archivo nunca se borra por haberse subido (solo por "Liberar espacio", RN-09).
 
 import type {
   Capture,
@@ -85,7 +87,14 @@ export async function upsertCapture(c: Capture, db: Db = getDb()): Promise<void>
        size_bytes = excluded.size_bytes, width = excluded.width, height = excluded.height, md5 = excluded.md5,
        quality_status = excluded.quality_status, quality_profile_version = excluded.quality_profile_version,
        local_transfer_status = excluded.local_transfer_status, remote_sync_status = excluded.remote_sync_status,
-       captured_at = excluded.captured_at, updated_at = excluded.updated_at`,
+       captured_at = excluded.captured_at,
+       -- Fase 4: los metadatos que trae la foto (cámara) prevalecen sobre la fila provisional creada con CAPTURE_OK.
+       user_id = CASE WHEN excluded.user_id <> '' THEN excluded.user_id ELSE captures.user_id END,
+       device_id = excluded.device_id,
+       pass_id = COALESCE(excluded.pass_id, captures.pass_id),
+       lateral_code = COALESCE(excluded.lateral_code, captures.lateral_code),
+       replaces_capture_id = COALESCE(excluded.replaces_capture_id, captures.replaces_capture_id),
+       updated_at = excluded.updated_at`,
     [
       c.captureId,
       c.sequenceId,
@@ -275,4 +284,49 @@ export async function getQualityResult(captureId: string, db: Db = getDb()): Pro
             durationMs: r.duration_ms ?? 0,
           },
   };
+}
+
+// ------------------------------------------------------------------ sincronización (controlador, Fase 4)
+
+/** Estado de la captura respecto de la plataforma Django (y el error visible en PANT-20, si lo hay). */
+export async function setRemoteSyncStatus(
+  captureId: string,
+  status: RemoteSyncStatus,
+  lastError: string | null = null,
+  db: Db = getDb(),
+): Promise<void> {
+  await db.runAsync(
+    `UPDATE captures SET remote_sync_status = ?, last_error = ?,
+       sync_attempts = sync_attempts + CASE WHEN ? IN ('SINCRONIZADO','ERROR_SINCRONIZACION') THEN 1 ELSE 0 END,
+       updated_at = ? WHERE capture_id = ?`,
+    [status, lastError, status, nowIso(), captureId],
+  );
+}
+
+/** Sesión → SINCRONIZADO: todas sus capturas de evidencia ya confirmadas en el servidor. */
+export async function countUnsyncedEvidence(sessionId: string, db: Db = getDb()): Promise<number> {
+  const r = await db.getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM captures WHERE session_id = ? AND is_test = 0 AND local_transfer_status = 'RECIBIDA_CONTROLADOR'
+       AND COALESCE(remote_sync_status, 'PENDIENTE_NUBE') <> 'SINCRONIZADO'`,
+    [sessionId],
+  );
+  return r?.n ?? 0;
+}
+
+/** "Reintentar errores" (PANT-20): las fotos con error de sincronización vuelven a PENDIENTE_NUBE. */
+export async function resetCaptureSyncErrors(db: Db = getDb()): Promise<number> {
+  const r = await db.runAsync(
+    "UPDATE captures SET remote_sync_status = 'PENDIENTE_NUBE', updated_at = ? WHERE remote_sync_status = 'ERROR_SINCRONIZACION'",
+    [nowIso()],
+  );
+  return r.changes;
+}
+
+/** Al arrancar: una foto que quedó SUBIENDO (app cerrada a mitad del envío) vuelve a PENDIENTE_NUBE. */
+export async function releaseUploadingCaptures(db: Db = getDb()): Promise<number> {
+  const r = await db.runAsync(
+    "UPDATE captures SET remote_sync_status = 'PENDIENTE_NUBE', updated_at = ? WHERE remote_sync_status = 'SUBIENDO'",
+    [nowIso()],
+  );
+  return r.changes;
 }

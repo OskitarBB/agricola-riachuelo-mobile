@@ -1,19 +1,29 @@
 # Riachuelo Monitoreo — guía para agentes y desarrolladores
 
-**Antes de cambiar código lee:** `docs/referencia/MAESTRO_APP_MOVIL_v1.0.pdf` (reglas R-01..R-20, RN, protocolo,
-anexos), `docs/referencia/CONTEXTO_ERRORES_Y_CONFIGURACION.txt` (cambios CFG-2 y errores ya resueltos) y `docs/adr/`.
+**Antes de cambiar código lee:** el Archivo Maestro App Móvil **v2.0** (`docs/referencia/MAESTRO_APP_MOVIL_v2.0.pdf`;
+la v1.0 queda como histórico), `docs/referencia/CONTEXTO_ERRORES_Y_CONFIGURACION.txt`, `docs/adr/` (0006: Fase 4) y,
+para todo lo que toca el servidor, `docs/INTEGRACION_APP.md` del repositorio de la plataforma.
 
 Reglas del proyecto (resumen):
 - SDK 57. Instalar módulos con `npx expo install` (en entornos sin acceso a api.expo.dev: `EXPO_OFFLINE=1`).
 - Todo plugin de `app.json` debe estar instalado. Nada nativo fuera de Expo Go se carga sin `require()` diferido
   e `isRunningInExpoGo()` (ver `src/local-network/factory.ts`).
+- La app habla **solo con la plataforma Django** (`/api/v1`, HTTPS en el piloto). Nunca con Supabase y nunca con
+  secretos de Cloudinary: la subida de cada foto usa el ticket firmado por Django (R-18, R-21). Solo
+  `src/api/httpClient.ts` arma URLs de la API y solo `src/api/cloudinaryUpload.ts` habla con Cloudinary.
+- Contrato `/api/v1`: agregar campos sí; quitar o renombrar no (hay celulares en campo con versiones anteriores).
 - Solo modos MANUAL y AUTOMÁTICO. Cambio de marcador manual; en AUTOMÁTICO solo en pausa.
 - Después de CADA login se elige la función del celular en PANT-08 (Controlador, Cámara 1, Cámara 2) y RN-15 se
-  decide con `decideRoleChange` (ADR 0005). La cola de sincronización solo bloquea cuando exista la Fase 4.
+  decide con `decideRoleChange` (ADR 0005). Con la Fase 4, la cola pendiente del controlador bloquea el cambio de
+  función; los errores definitivos solo avisan (ADR 0006).
+- Sincronización: `src/sync/syncService.ts` (motor), `syncPlanner.ts` (orden y padres, puro), `syncPayloads.ts`
+  (datos del contrato, puro), `captureUploader.ts` y `retry.ts` (copias exactas del maestro 15.7.3 y C.3).
 - Textos de UI solo en `src/ui/strings.ts` / `src/ui/messages.ts`. Funciones no implementadas muestran "Pendiente".
-- Parámetros solo en `src/config/defaults.ts` (CFG-2) y coherentes con `checkConfigCoherence()`.
-- Cada archivo empieza con un comentario "QUÉ HACE" (+ "INTEGRACIÓN FUTURA" si cambia con la web/BD).
-- Antes de terminar: `npm run validate` (typecheck + lint + jest).
+- Parámetros solo en `src/config/defaults.ts` (**CFG-4**) y coherentes con `checkConfigCoherence()`.
+- Migraciones SQLite: nunca modificar una publicada; agregar la siguiente (hoy van 001 a 004).
+- Cada archivo empieza con un comentario "QUÉ HACE".
+- Antes de terminar: `npm run validate` (typecheck + lint + jest). Si se toca la sincronización o el contrato, correr
+  también `tools/verificacion` (ver su README) contra la plataforma en la laptop.
 
 ---
 

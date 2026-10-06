@@ -5,6 +5,7 @@
 // ofrece "Esperar" o "Cerrar igual" (mensaje CIERRE_CON_PENDIENTES); "Cerrar igual" registra la incidencia.
 // Al cerrar: CLOSED + cola de sincronización + SESSION_CLOSED a las cámaras + se borran fotos de prueba corta.
 // Las fotos que falten llegarán después (8.13) cuando la cámara se vincule de nuevo.
+// Fase 4: al cerrar, si hay Wi-Fi y sesión ONLINE, la sincronización automática empieza sola (Supuesto S-08).
 
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -15,6 +16,7 @@ import { sessionPasses } from '../../src/controller/sessionService';
 import { useController } from '../../src/controller/controllerStore';
 import type { CameraRole, MonitoringPass } from '../../src/domain/types';
 import { listIncidents } from '../../src/diagnostics/incidents';
+import { maybeAutoSync } from '../../src/sync/syncService';
 import { AppButton } from '../../src/ui/components/AppButton';
 import { AppHeader } from '../../src/ui/components/AppHeader';
 import { Card } from '../../src/ui/components/Card';
@@ -74,6 +76,7 @@ export default function SessionSummaryScreen() {
     }
     showToast('SESION_CERRADA', 'success');
     router.replace('/controller');
+    void maybeAutoSync('CIERRE');
   };
 
   const totalMissing = missing.CAMERA_1 + missing.CAMERA_2;

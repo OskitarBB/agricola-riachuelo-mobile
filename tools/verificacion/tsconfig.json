@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "paths": {
+      "expo-sqlite": ["./mocks/expo-sqlite.ts"],
+      "expo-secure-store": ["./mocks/expo-secure-store.ts"],
+      "expo-crypto": ["./mocks/expo-crypto.ts"],
+      "expo-constants": ["./mocks/expo-constants.ts"],
+      "expo-network": ["./mocks/expo-network.ts"],
+      "expo-keep-awake": ["./mocks/expo-keep-awake.ts"],
+      "expo-application": ["./mocks/expo-application.ts"],
+      "expo-device": ["./mocks/expo-device.ts"],
+      "expo-file-system": ["./mocks/expo-file-system.ts"],
+      "react-native": ["./mocks/react-native.ts"]
+    }
+  },
+  "include": ["./**/*.ts"]
+}

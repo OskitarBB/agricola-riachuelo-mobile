@@ -63,7 +63,39 @@ export type AppErrorCode =
   // Elección de función después del login (ADR 0005):
   | 'CAMBIO_FUNCION_SESION_ABIERTA'
   | 'CAMBIO_FUNCION_FOTOS_PENDIENTES'
-  | 'SINCRONIZACION_PENDIENTE';
+  | 'SINCRONIZACION_PENDIENTE'
+  // v2.0 (maestro §19): subida directa a Cloudinary
+  | 'FOTO_DEMASIADO_GRANDE'
+  | 'SUBIDA_NUBE_FALLIDA'
+  | 'REINTENTOS_DE_SUBIDA_AGOTADOS'
+  // Fase 4 (Supuesto S-04, mismos criterios de redacción): resultado de una ronda de sincronización
+  | 'SINCRONIZADO'
+  | 'NADA_PENDIENTE'
+  | 'SINCRONIZACION_PARCIAL'
+  | 'SINCRONIZACION_CON_ERRORES'
+  | 'SINCRONIZACION_EN_CURSO'
+  | 'SINCRONIZACION_DETENIDA'
+  | 'CAMBIO_FUNCION_ERRORES_SINCRONIZACION'
+  | 'CAMBIO_FUNCION_SINCRONIZACION_PENDIENTE'
+  | 'ACCESO_DENEGADO'
+  | 'RESPUESTA_NO_JSON'
+  // Fase 4: motivo visible en PANT-20 de un elemento con error
+  | 'DATOS_LOCALES_FALTANTES'
+  | 'METADATOS_INCOMPLETOS'
+  | 'CALIDAD_SIN_EVALUAR'
+  | 'ARCHIVO_NO_DISPONIBLE'
+  | 'CAPTURA_NO_ENCONTRADA'
+  | 'CAPTURA_SIN_PASADA'
+  | 'SESION_CON_ERROR'
+  | 'PASADA_CON_ERROR'
+  | 'SECUENCIAS_CON_ERROR'
+  | 'PADRE_NO_SINCRONIZADO'
+  | 'TICKET_INVALIDO'
+  | 'RECHAZO_NUBE'
+  | 'RED'
+  // Fase 4: cuenta y contraseña con la plataforma Django
+  | 'CONTRASENA_ACTUAL_INCORRECTA'
+  | 'CONEXION_OK';
 
 export const API_ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   VALIDATION_ERROR: 'Revisa los datos marcados e inténtalo de nuevo.',
@@ -83,6 +115,10 @@ export const API_ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   SEQUENCE_NOT_FOUND: 'El servidor aún no tiene la secuencia; se enviará primero.',
   CAPTURE_CONFLICT: 'El servidor ya tiene una foto con ese identificador pero con otro contenido. Requiere revisión.',
   PAYLOAD_TOO_LARGE: 'La foto supera el tamaño permitido por el servidor.',
+  UPLOAD_SIGNATURE_INVALID: 'El servidor no pudo validar la foto subida. Se volverá a subir.',
+  UPLOAD_NOT_FOUND: 'El servidor no encontró la foto en la nube. Se volverá a subir.',
+  UPLOAD_MISMATCH: 'La foto en la nube no coincide con la del celular. Requiere revisión.',
+  NOT_FOUND: 'El servidor no tiene ese registro.',
   INTERNAL_ERROR: 'El servidor tuvo un problema. Se volverá a intentar.',
 };
 
@@ -161,7 +197,62 @@ export const APP_ERROR_MESSAGES: Record<AppErrorCode, string> = {
     'Hay fotos pendientes de enviar al controlador. Espera a que se envíen antes de cambiar la función.',
   SINCRONIZACION_PENDIENTE: 'Este celular tiene datos del controlador sin sincronizar. No se borran: quedan guardados aquí.',
   PENDIENTE: 'Pendiente',
+  FOTO_DEMASIADO_GRANDE:
+    'La foto supera el tamaño que acepta la nube. Avisa al responsable: se resuelve con la configuración, no repitiendo la foto.',
+  SUBIDA_NUBE_FALLIDA: 'No se pudo subir una foto a la nube. Se reintentará.',
+  REINTENTOS_DE_SUBIDA_AGOTADOS: 'Una foto no se pudo validar después de varios intentos. Requiere revisión.',
+  SINCRONIZADO: 'Todo quedó sincronizado con el servidor.',
+  NADA_PENDIENTE: 'No hay nada pendiente por sincronizar.',
+  SINCRONIZACION_PARCIAL: 'Quedan datos por enviar. Se volverá a intentar.',
+  SINCRONIZACION_CON_ERRORES: 'Algunos datos no se pudieron enviar y requieren revisión.',
+  SINCRONIZACION_EN_CURSO: 'La sincronización ya está en curso.',
+  SINCRONIZACION_DETENIDA: 'Sincronización detenida. Lo pendiente sigue guardado en el celular.',
+  CAMBIO_FUNCION_SINCRONIZACION_PENDIENTE:
+    'Este celular tiene datos del controlador sin sincronizar. Sincronízalos con internet antes de cambiar la función.',
+  CAMBIO_FUNCION_ERRORES_SINCRONIZACION:
+    'Hay datos que no se pudieron sincronizar. No se borran: quedan guardados en este celular para revisarlos.',
+  ACCESO_DENEGADO: 'El servidor rechazó el acceso. Inténtalo más tarde o avisa al administrador.',
+  RESPUESTA_NO_JSON: 'La red no deja llegar al servidor (¿Wi-Fi con página de acceso?). Se volverá a intentar.',
+  DATOS_LOCALES_FALTANTES: 'Faltan datos de este registro en el celular. Requiere revisión.',
+  METADATOS_INCOMPLETOS: 'A la foto le faltan datos (tamaño o huella). Requiere revisión.',
+  CALIDAD_SIN_EVALUAR: 'La foto no tiene evaluación de calidad. Requiere revisión.',
+  ARCHIVO_NO_DISPONIBLE: 'El archivo de la foto ya no está en este celular.',
+  CAPTURA_NO_ENCONTRADA: 'La foto no está registrada en este celular.',
+  CAPTURA_SIN_PASADA: 'La foto no tiene una pasada asociada. Requiere revisión.',
+  SESION_CON_ERROR: 'No se envió porque la sesión tiene un error.',
+  PASADA_CON_ERROR: 'No se envió porque su pasada tiene un error.',
+  SECUENCIAS_CON_ERROR: 'No se envió porque las secuencias de su pasada tienen un error.',
+  PADRE_NO_SINCRONIZADO: 'El servidor no reconoce la sesión, pasada o secuencia de este dato. Requiere revisión.',
+  TICKET_INVALIDO: 'El servidor respondió un permiso de subida inválido. Requiere revisión.',
+  RECHAZO_NUBE: 'La nube rechazó la foto. Requiere revisión.',
+  RED: 'Se cortó la conexión durante el envío. Se volverá a intentar.',
+  CONTRASENA_ACTUAL_INCORRECTA: 'La contraseña actual no es correcta.',
+  CONEXION_OK: 'El servidor responde correctamente.',
 };
+
+/** Códigos de classifyCloudinaryError (src/sync/retry.ts) que solo piden reintentar más tarde. */
+const CLOUD_RETRY_CODES = [
+  'TICKET_VENCIDO',
+  'FIRMA_RECHAZADA',
+  'LIMITE_DE_TASA',
+  'CLOUDINARY_NO_DISPONIBLE',
+  'RESPUESTA_INVALIDA',
+  'TICKETS_AGOTADOS',
+];
+
+/**
+ * Texto del motivo de un elemento de la cola en PANT-20: códigos del servidor (ApiErrorCode), de la subida a
+ * Cloudinary, del controlador (DATOS_LOCALES_FALTANTES…) o HTTP_nnn cuando el servidor no mandó código.
+ */
+export function syncCodeMessage(code: string | null): string {
+  if (!code) return APP_ERROR_MESSAGES.ERROR_INESPERADO;
+  if (CLOUD_RETRY_CODES.includes(code)) return APP_ERROR_MESSAGES.SUBIDA_NUBE_FALLIDA;
+  if (code === 'PUBLIC_ID_DISTINTO' || code === 'RECHAZO_CLOUDINARY') return APP_ERROR_MESSAGES.RECHAZO_NUBE;
+  if (code === 'VALIDATION_ERROR') return 'El servidor rechazó los datos de este envío. Requiere revisión (exporta el diagnóstico).';
+  const http = /^HTTP_(\d+)$/.exec(code);
+  if (http) return `El servidor respondió con un error (${http[1]}). Requiere revisión.`;
+  return messageFor(code);
+}
 
 /** Texto para cualquier código conocido; si no se reconoce, mensaje genérico. */
 export function messageFor(code: string): string {

@@ -28,7 +28,8 @@
     "piloto": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_USE_MOCK_API": "1",
+        "EXPO_PUBLIC_API_URL": "https://monitoreo.agricolariachuelo.org",
+        "EXPO_PUBLIC_USE_MOCK_API": "0",
         "EXPO_PUBLIC_APP_ENV": "piloto"
       },
       "android": {

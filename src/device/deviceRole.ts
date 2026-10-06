@@ -2,8 +2,9 @@
 //
 // QUÉ HACE: guarda la función en app_meta.device_role (persiste entre reinicios) y valida el cambio
 // con RN-15 (sin sesión de monitoreo abierta ni transferencias/sincronizaciones pendientes).
-// ADR 0005: loadRoleChangeContext() reúne lo que PANT-08 necesita para decidir con
-// decideRoleChange(); mientras la sincronización (Fase 4) no exista, la cola pendiente solo avisa.
+// ADR 0005: loadRoleChangeContext() reúne lo que PANT-08 necesita para decidir con decideRoleChange().
+// Fase 4: la sincronización existe (SYNC_IMPLEMENTED = true), así que la cola pendiente del controlador BLOQUEA el
+// cambio; los elementos con error definitivo solo avisan (quedan guardados para revisarlos).
 
 import { canChangeDeviceRole, type RuleResult } from '../domain/rules';
 import type { DeviceRole } from '../domain/types';
@@ -12,7 +13,7 @@ import { getMeta, setMeta } from '../storage/repositories/appMetaRepo';
 import { getOpenContext } from '../storage/repositories/cameraContextRepo';
 import { countPendingTransfers } from '../storage/repositories/captureRepo';
 import { getCurrentSession } from '../storage/repositories/sessionRepo';
-import { countPendingSync } from '../storage/repositories/syncQueueRepo';
+import { countPendingSync, countSyncErrors } from '../storage/repositories/syncQueueRepo';
 import { isSyncImplemented } from '../sync/syncService';
 
 export async function loadDeviceRole(): Promise<DeviceRole | null> {
@@ -33,16 +34,19 @@ export interface RoleChangeContext {
   pendingTransfers: number;
   pendingSync: number;
   syncAvailable: boolean;
+  syncErrors: number;
 }
 
 export async function loadRoleChangeContext(current: DeviceRole | null): Promise<RoleChangeContext> {
   const syncAvailable = isSyncImplemented();
-  if (!current) return { hasOpenSession: false, pendingTransfers: 0, pendingSync: 0, syncAvailable };
+  if (!current) return { hasOpenSession: false, pendingTransfers: 0, pendingSync: 0, syncAvailable, syncErrors: 0 };
+  const isController = current === 'CONTROLADOR';
   return {
     hasOpenSession: await hasOpenMonitoringSession(current),
-    pendingTransfers: current === 'CONTROLADOR' ? 0 : await countPendingTransfers(),
-    pendingSync: current === 'CONTROLADOR' ? await countPendingSync() : 0,
+    pendingTransfers: isController ? 0 : await countPendingTransfers(),
+    pendingSync: isController ? await countPendingSync() : 0,
     syncAvailable,
+    syncErrors: isController ? await countSyncErrors() : 0,
   };
 }
 

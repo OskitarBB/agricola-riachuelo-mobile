@@ -4,7 +4,8 @@
 // confirmación y aceptación del aviso de privacidad. Valida por campo (validation.ts) y envía la solicitud.
 // La cuenta queda PENDIENTE_APROBACION hasta que el ADMINISTRADOR la apruebe en la web → PANT-04.
 // Sin internet el botón queda deshabilitado.
-// INTEGRACIÓN FUTURA: POST /api/v1/auth/register (Spring Boot); la aprobación se hace en la web (Angular).
+// Plataforma Django: POST /api/v1/auth/register (201, cuenta PENDIENTE_APROBACION); el administrador la aprueba en la
+// web con el rol «Operador de campo». Los motivos de la política de contraseña llegan en fieldErrors.
 
 import { router } from 'expo-router';
 import { useState } from 'react';

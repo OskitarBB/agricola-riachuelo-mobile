@@ -1,7 +1,7 @@
-// src/api/bootstrapApi.ts — Descarga de catálogos y parámetros (GET /mobile/bootstrap, RF-15).
+// src/api/bootstrapApi.ts — Descarga de catálogos y parámetros (GET /api/v1/mobile/bootstrap, RF-15).
 //
-// INTEGRACIÓN FUTURA: el backend real arma esta respuesta desde PostgreSQL (lotes, hileras, segmentos y
-// marcadores administrados en la web). Si publica qualityProfile, la app lo aplica (applyQualityProfile).
+// La plataforma Django arma esta respuesta desde Supabase (lotes, hileras, segmentos y marcadores administrados en
+// la web, más el perfil de calidad publicado). Si publica qualityProfile, la app lo aplica (applyQualityProfile).
 
 import type { BootstrapResponse } from './dto';
 import { apiRequest } from './httpClient';

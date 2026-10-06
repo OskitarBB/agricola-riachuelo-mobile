@@ -6,7 +6,7 @@
 // Cabecera con [Ajustes] y [Cerrar sesión] en la misma zona (contexto §25.3).
 
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { catalogInfo, isCatalogOld, type CatalogInfo } from '../../src/controller/catalogService';
@@ -14,6 +14,7 @@ import { controllerRuntime } from '../../src/controller/controllerRuntime';
 import { useController } from '../../src/controller/controllerStore';
 import { formatDateTime } from '../../src/domain/time';
 import { pendingSyncCount } from '../../src/sync/syncQueue';
+import { useSyncStore } from '../../src/sync/syncStore';
 import { AppButton } from '../../src/ui/components/AppButton';
 import { AppHeader } from '../../src/ui/components/AppHeader';
 import { Card } from '../../src/ui/components/Card';
@@ -30,6 +31,8 @@ export default function ControllerPanel() {
   const { session, pass, ownBattery, ownFreeSpace, gps, alerts } = useController();
   const [info, setInfo] = useState<CatalogInfo | null>(null);
   const [pendingSync, setPendingSync] = useState(0);
+  const syncRunning = useSyncStore((s) => s.running);
+  const syncTick = useSyncStore((s) => s.tick);
 
   useFocusEffect(
     useCallback(() => {
@@ -38,6 +41,10 @@ export default function ControllerPanel() {
       void controllerRuntime.reload();
     }, []),
   );
+  // La sincronización automática (S-08) puede vaciar la cola mientras el panel está abierto.
+  useEffect(() => {
+    if (!syncRunning) void pendingSyncCount().then(setPendingSync);
+  }, [syncRunning, syncTick]);
 
   const hasCatalogs = !!info && info.lots > 0;
   const old = info ? isCatalogOld(info) : false;
@@ -141,7 +148,9 @@ export default function ControllerPanel() {
             onPress={() => router.push('/controller/catalogs')}
           />
           <AppButton
-            title={pendingSync > 0 ? `${S.controller.sync} (${pendingSync})` : S.controller.sync}
+            title={
+              syncRunning ? `${S.controller.sync} …` : pendingSync > 0 ? `${S.controller.sync} (${pendingSync})` : S.controller.sync
+            }
             variant="secondary"
             style={styles.cell}
             onPress={() => router.push('/controller/sync')}

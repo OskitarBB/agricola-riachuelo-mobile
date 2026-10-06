@@ -11,7 +11,7 @@
 //  3. ÁREAS NO HECHAS: al cerrar la sesión se comparan los lotes PLANIFICADOS con lo hecho y se listan
 //     lotes sin trabajar, hileras sin iniciar y laterales que faltan; cada una exige un motivo.
 // No toca SQLite ni la red: se prueba en __tests__/coverage.test.ts.
-// INTEGRACIÓN FUTURA (Fase 4): el backend devolverá el ciclo vigente y el avance consolidado de TODOS los
+// PENDIENTE EN LA PLATAFORMA (CFG-3): el backend devolverá el ciclo vigente y el avance consolidado de TODOS los
 // controladores; un supervisor podrá abrir ciclos y reabrir hileras desde la web. Estas funciones reciben
 // esas pasadas sin cambiar las pantallas.
 

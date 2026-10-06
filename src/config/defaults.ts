@@ -1,4 +1,4 @@
-// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-2).
+// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-4).
 //
 // QUÉ HACE: concentra TODOS los umbrales, tiempos, puertos e intervalos (regla R-08 del maestro:
 // ningún número "suelto" en el código). Los servicios leen estos valores a través de src/config/index.ts.
@@ -10,9 +10,21 @@
 //  - protocol.captureResponseTimeoutMs: 7 000 → 8 000 ms para incluir la espera de estabilidad.
 //  - ui.*: NUEVO. Sonidos y vibración de los botones.
 //
+// CAMBIOS CFG-2 → CFG-4 (Fase 4, maestro v2.0 §17; CFG-3 —ciclos— no cambió parámetros):
+//  - sync.uploadRequestTimeoutMs, maxUploadBytes, maxReuploads, ticketMinRemainingMs, maxTicketRequests:
+//    subida directa de cada foto a Cloudinary con el ticket firmado por Django (§15.7). Valores del maestro.
+//  - sync.uploadMode (Supuesto S-07): 'TICKET' (v2.0, la foto va directo a Cloudinary) o 'MULTIPART' (v1, la
+//    foto pasa por Django; solo si el servidor tiene API_SUBIDA_MULTIPART=true). Por defecto TICKET.
+//  - sync.autoSync / sync.autoSyncWifiOnly (Supuesto S-08): sincronizar solo, con la app abierta, cuando
+//    vuelve el internet y no hay sesión de monitoreo abierta. Por defecto solo con Wi-Fi (fotos de ~4 MB).
+//  - sync.maxConsecutiveFailures (Supuesto S-08): fallos seguidos del servidor que detienen una ronda.
+//  - sync.autoSyncIntervalMs (Supuesto S-08): revisión periódica de la cola con la app abierta (5 min).
+//  - auth.clockSkewWarnSeconds: los vencimientos de los tokens se miden con la hora del servidor (serverTime de login,
+//    refresh y health); si el reloj del celular difiere más que esto, se registra NET/SERVER_CLOCK_OFFSET.
+//
 // Los valores marcados "calibrar" son iniciales: se ajustan con mediciones y NO son resultados validados.
 
-export const CONFIG_VERSION = 'CFG-2';
+export const CONFIG_VERSION = 'CFG-4';
 
 export interface AppConfig {
   auth: {
@@ -22,6 +34,7 @@ export interface AppConfig {
     pbkdf2Iterations: number; // calibrar: objetivo ≤ 1,5 s en el celular más lento del piloto
     passwordMinLength: number;
     refreshMarginSeconds: number; // renovar el access token si vence en menos de este margen
+    clockSkewWarnSeconds: number; // diferencia con la hora del servidor que se registra como aviso (diagnóstico)
   };
   catalog: {
     bootstrapWarnAgeHours: number; // advertir si los catálogos son más antiguos
@@ -103,6 +116,23 @@ export interface AppConfig {
     requestTimeoutMs: number;
     healthPath: string; // relativo a la base `${EXPO_PUBLIC_API_URL}/api/v1`
     batchSize: number; // secuencias o incidencias por petición
+    // ---- v2.0: subida directa a Cloudinary (sección 15.7)
+    uploadRequestTimeoutMs: number; // tiempo máximo de la subida de una foto a Cloudinary
+    maxUploadBytes: number; // límite por imagen del plan Free de Cloudinary (10 MB); mayor → FOTO_DEMASIADO_GRANDE
+    maxReuploads: number; // subidas repetidas permitidas cuando Django rechaza la subida (REPETIR_SUBIDA)
+    ticketMinRemainingMs: number; // vigencia mínima que debe quedarle al ticket para empezar a subir
+    maxTicketRequests: number; // tickets por intento (ticket casi vencido o rechazado por Cloudinary)
+    // ---- Supuestos S-07 y S-08 (ver docs/adr/0006-fase4-sincronizacion.md)
+    /** TICKET = v2.0 (ticket + Cloudinary + confirmación JSON). MULTIPART = v1 (Django sube la foto). */
+    uploadMode: 'TICKET' | 'MULTIPART';
+    /** Sincronizar solo al volver el internet (app abierta, controlador, sin sesión de monitoreo abierta). */
+    autoSync: boolean;
+    /** La sincronización automática solo con Wi-Fi (la manual pide confirmación con datos móviles). */
+    autoSyncWifiOnly: boolean;
+    /** Fallos seguidos del servidor (5xx, 429) que detienen la ronda para no insistir. */
+    maxConsecutiveFailures: number;
+    /** Cada cuánto se revisa, con la app abierta, si hay elementos cuya espera ya venció (sincronización automática). */
+    autoSyncIntervalMs: number;
   };
   gps: {
     timeIntervalMs: number;
@@ -158,6 +188,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     pbkdf2Iterations: 40_000,
     passwordMinLength: 8,
     refreshMarginSeconds: 60,
+    clockSkewWarnSeconds: 120,
   },
   catalog: { bootstrapWarnAgeHours: 72 },
   pairing: { controlPort: 8765, filePort: 8766, requireSameAppVersion: false, pairingTokenBytes: 16 },
@@ -223,6 +254,16 @@ export const DEFAULT_CONFIG: AppConfig = {
     requestTimeoutMs: 60_000,
     healthPath: '/health',
     batchSize: 200,
+    uploadRequestTimeoutMs: 120_000,
+    maxUploadBytes: 10 * 1024 * 1024,
+    maxReuploads: 2,
+    ticketMinRemainingMs: 300_000,
+    maxTicketRequests: 2,
+    uploadMode: 'TICKET',
+    autoSync: true,
+    autoSyncWifiOnly: true,
+    maxConsecutiveFailures: 3,
+    autoSyncIntervalMs: 300_000,
   },
   gps: { timeIntervalMs: 1_000, distanceIntervalM: 0, maxAgeMs: 10_000, warnAccuracyM: 15 },
   device: {
@@ -271,5 +312,17 @@ export function checkConfigCoherence(cfg: AppConfig): string[] {
   if (!cfg.sync.healthPath.startsWith('/')) errors.push('healthPath debe empezar con /');
   // Una página de RESYNC_STATE (≈ 220 bytes por captura) debe caber en maxMessageBytes.
   if (p.resyncPageSize * 220 + 512 > p.maxMessageBytes) errors.push('resyncPageSize no cabe en maxMessageBytes');
+  // Reglas v2.0 (maestro §17, Anexo E.8): subida directa a Cloudinary.
+  const s = cfg.sync;
+  if (s.uploadRequestTimeoutMs >= s.ticketMinRemainingMs) errors.push('uploadRequestTimeoutMs ≥ ticketMinRemainingMs');
+  if (s.ticketMinRemainingMs >= 3_600_000) errors.push('ticketMinRemainingMs ≥ 1 hora (vigencia de la firma)');
+  if (s.maxUploadBytes > 10 * 1024 * 1024) errors.push('maxUploadBytes > 10 MB (plan Free de Cloudinary)');
+  if (s.maxTicketRequests < 2 || s.maxReuploads < 1) errors.push('maxTicketRequests ≥ 2 y maxReuploads ≥ 1');
+  // Lotes del contrato /api/v1: el servidor acepta como máximo 200 secuencias o incidencias por petición.
+  if (s.batchSize < 1 || s.batchSize > 200) errors.push('batchSize fuera de 1..200');
+  if (s.maxConcurrent !== 1) errors.push('maxConcurrent debe ser 1 (una foto a la vez, RNF-19)');
+  if (s.retryDelaysMs.length === 0) errors.push('retryDelaysMs vacío');
+  if (s.autoSyncIntervalMs < 60_000) errors.push('autoSyncIntervalMs < 1 min');
+  if (s.maxConsecutiveFailures < 1) errors.push('maxConsecutiveFailures < 1');
   return errors;
 }

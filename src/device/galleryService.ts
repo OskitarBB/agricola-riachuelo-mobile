@@ -4,12 +4,12 @@
 // de cada una (calidad, métricas, rol, estado de transferencia) desde SQLite o desde el archivo .json que
 // acompaña a las fotos de prueba. Permite compartir una foto y borrar SOLO las fotos de prueba (no son
 // evidencia: RN-09/RN-21 protegen las demás).
-// INTEGRACIÓN FUTURA: cuando la sincronización esté activa, la ficha mostrará también remote_sync_status
-// (si la foto ya está en el servidor / S3).
+// La ficha incluye remote_sync_status en el controlador (SINCRONIZADO = la plataforma Django la confirmó y está en
+// Cloudinary). La app nunca descarga fotos ni resultados de la IA desde la nube (§28.10).
 
 import * as Sharing from 'expo-sharing';
 
-import type { CameraRole, LocalTransferStatus, QualityMetrics, QualityStatus } from '../domain/types';
+import type { CameraRole, LocalTransferStatus, QualityMetrics, QualityStatus, RemoteSyncStatus } from '../domain/types';
 import { deleteAllTestPhotos, listStoredPhotos, readTestSidecar, type PhotoKind, type StoredPhoto } from '../storage/files';
 import { getCaptureByFile, getQualityResult } from '../storage/repositories/captureRepo';
 
@@ -30,6 +30,8 @@ export interface PhotoDetails {
   metrics: QualityMetrics | null;
   role: CameraRole | null;
   transfer: LocalTransferStatus | null;
+  /** Solo en el controlador: estado respecto de la plataforma (null en cámaras y fotos de prueba). */
+  cloud: RemoteSyncStatus | null;
   capturedAt: string | null;
   auto: boolean | null;
 }
@@ -46,18 +48,20 @@ export async function photoDetails(p: StoredPhoto): Promise<PhotoDetails> {
       metrics: s?.metrics ?? null,
       role: null,
       transfer: null,
+      cloud: null,
       capturedAt: s?.takenAt ?? null,
       auto: s?.auto ?? null,
     };
   }
   const c = await getCaptureByFile(p.uri);
-  if (!c) return { quality: null, metrics: null, role: null, transfer: null, capturedAt: null, auto: null };
+  if (!c) return { quality: null, metrics: null, role: null, transfer: null, cloud: null, capturedAt: null, auto: null };
   const q = await getQualityResult(c.captureId);
   return {
     quality: c.qualityStatus,
     metrics: q?.metrics ?? null,
     role: c.cameraRole,
     transfer: c.localTransferStatus,
+    cloud: c.isTest ? null : c.remoteSyncStatus,
     capturedAt: c.capturedAt,
     auto: null,
   };

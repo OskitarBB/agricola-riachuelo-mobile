@@ -8,8 +8,8 @@
 //    dirección debe ir el LATERAL B.
 //  - Áreas no hechas de una sesión: compara los lotes planificados con lo hecho (para PANT-19) y lista las
 //    registradas en el ciclo (aviso en el panel del controlador).
-// INTEGRACIÓN FUTURA (Fase 4): el ciclo vigente y el avance de OTROS controladores vendrán del backend; un
-// supervisor abrirá ciclos y reabrirá hileras desde la web. Las pantallas no cambian.
+// PENDIENTE EN LA PLATAFORMA (CFG-3, código latente): el ciclo vigente y el avance de OTROS controladores vendrán del
+// bootstrap cuando la web los publique; un supervisor abrirá ciclos y reabrirá hileras desde la web.
 
 import {
   canStartNewCycle,

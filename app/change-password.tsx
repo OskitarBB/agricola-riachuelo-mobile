@@ -3,7 +3,8 @@
 // QUÉ HACE: pide contraseña actual, nueva y confirmación (política: 8+ caracteres con letras y números).
 // Si viene de una contraseña TEMPORAL es obligatorio: solo se puede cambiarla o cerrar sesión.
 // Al cambiarla con internet se crea el verificador para entrar sin internet y se continúa.
-// INTEGRACIÓN FUTURA: POST /api/v1/auth/change-password (204).
+// Plataforma Django: POST /api/v1/auth/change-password (204). Django además rechaza contraseñas comunes, solo
+// numéricas o parecidas al nombre o correo (PASSWORD_POLICY): su motivo se muestra debajo de "Nueva contraseña".
 
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -47,7 +48,15 @@ export default function ChangePasswordScreen() {
     setBusy(false);
     if (!r.ok) {
       feedback('error');
-      setError(messageFor(r.code));
+      // Motivos por campo del servidor (newPassword / currentPassword) debajo de su caja.
+      const server: Record<string, string> = {};
+      for (const fe of r.fieldErrors ?? []) {
+        if (fe.field === 'newPassword') server.next = fe.message;
+        if (fe.field === 'currentPassword') server.current = fe.message;
+      }
+      if (r.code === 'CONTRASENA_ACTUAL_INCORRECTA') server.current = messageFor(r.code);
+      setErrors(server);
+      setError(Object.keys(server).length > 0 ? null : messageFor(r.code));
       return;
     }
     showToast(S.changePassword.done, 'success');
@@ -79,6 +88,7 @@ export default function ChangePasswordScreen() {
           error={errors.current}
         />
         <TextField label={S.changePassword.next} value={f.next} onChangeText={set('next')} secure error={errors.next} />
+        <Text style={styles.hint}>{S.changePassword.rules}</Text>
         <TextField
           label={S.changePassword.confirm}
           value={f.confirm}
@@ -94,6 +104,7 @@ export default function ChangePasswordScreen() {
 }
 
 const styles = StyleSheet.create({
+  hint: { color: colors.textMuted, fontSize: font.label, marginTop: -4, marginBottom: 10 },
   notice: {
     backgroundColor: colors.warnBg,
     color: colors.text,

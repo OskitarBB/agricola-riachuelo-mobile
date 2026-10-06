@@ -234,3 +234,61 @@ export function gpsFrom(lat: number | null, lon: number | null, accuracy: number
   if (lat === null || lon === null || ts === null) return null;
   return { lat, lon, accuracyM: accuracy, timestamp: ts };
 }
+
+/** Repetición que originó este captureId (RN-07): contexto vigente al repetir y foto que reemplaza. */
+export async function getRetakeByCapture(captureId: string, db: Db = getDb()): Promise<RetakeRequest | null> {
+  const r = await db.getFirstAsync<{
+    capture_id: string;
+    sequence_id: string;
+    pass_id: string;
+    camera_role: RetakeRequest['cameraRole'];
+    replaces_capture_id: string;
+    requested_at: string;
+    segment_id: string | null;
+    marker_id: string | null;
+    lat: number | null;
+    lon: number | null;
+    gps_accuracy_m: number | null;
+    gps_timestamp: string | null;
+    gps_age_ms: number | null;
+  }>('SELECT * FROM retake_requests WHERE capture_id = ?', [captureId]);
+  if (!r) return null;
+  return {
+    captureId: r.capture_id,
+    sequenceId: r.sequence_id,
+    passId: r.pass_id,
+    cameraRole: r.camera_role,
+    replacesCaptureId: r.replaces_capture_id,
+    requestedAt: r.requested_at,
+    segmentId: r.segment_id,
+    markerId: r.marker_id,
+    gps: gpsFrom(r.lat, r.lon, r.gps_accuracy_m, r.gps_timestamp),
+    gpsAgeMs: r.gps_age_ms,
+  };
+}
+
+// ------------------------------------------------------------------ pasadas por ciclo (CFG-3, migración 002)
+
+const CYCLE_PASSES = `SELECT p.* FROM monitoring_passes p JOIN monitoring_sessions s ON s.session_id = p.session_id
+  WHERE s.cycle_id = ?`;
+
+/** Pasadas de todas las sesiones de un ciclo (CFG-3: avance de campo; todavía sin pantallas, ADR 0004). */
+export async function listCyclePasses(cycleId: string, db: Db = getDb()): Promise<MonitoringPass[]> {
+  const rows = await db.getAllAsync<PassRow>(`${CYCLE_PASSES} ORDER BY p.created_at`, [cycleId]);
+  return rows.map(toDomain);
+}
+
+export async function listCyclePassesOfLot(lotId: string, cycleId: string, db: Db = getDb()): Promise<MonitoringPass[]> {
+  const rows = await db.getAllAsync<PassRow>(`${CYCLE_PASSES} AND p.lot_id = ? ORDER BY p.created_at`, [cycleId, lotId]);
+  return rows.map(toDomain);
+}
+
+export async function listCyclePassesOfRow(rowId: string, cycleId: string, db: Db = getDb()): Promise<MonitoringPass[]> {
+  const rows = await db.getAllAsync<PassRow>(`${CYCLE_PASSES} AND p.row_id = ? ORDER BY p.created_at`, [cycleId, rowId]);
+  return rows.map(toDomain);
+}
+
+/** Pasada → SINCRONIZADO (o vuelve a PENDIENTE_NUBE) junto con sus secuencias (Fase 4). */
+export async function setPassRemoteStatus(passId: string, status: RemoteSyncStatus, db: Db = getDb()): Promise<void> {
+  await db.runAsync('UPDATE monitoring_passes SET remote_sync_status = ?, updated_at = ? WHERE pass_id = ?', [status, nowIso(), passId]);
+}

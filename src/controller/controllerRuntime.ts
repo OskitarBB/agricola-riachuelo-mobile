@@ -12,8 +12,8 @@
 //  - Recuperación tras cierre o reinicio de la app (8.10): pasada a PAUSED y cámaras a DESCONECTADA.
 // Todo el procesamiento de mensajes entrantes se SERIALIZA en una cola para evitar carreras en SQLite.
 //
-// INTEGRACIÓN FUTURA: Fase 2/3 usa la misma lógica con la red real (factory.ts); Fase 4 agrega la
-// sincronización de la cola creada al cerrar (src/sync/syncService.ts).
+// La misma lógica funciona con la red real (factory.ts) y con el simulador. La cola que se crea al cerrar la sesión
+// la envía a la plataforma src/sync/syncService.ts (Fase 4).
 
 import { AppState, Platform as RNPlatform, type AppStateStatus, type NativeEventSubscription } from 'react-native';
 
@@ -48,11 +48,12 @@ import { createEnvelope } from '../protocol/envelope';
 import { ACK_REQUIRED, type Envelope, type LocalCaptureMeta, type MessageType, type PayloadMap } from '../protocol/messages';
 import { deleteMeta, setMetaJson } from '../storage/repositories/appMetaRepo';
 import { countMissingByRole, getCapture, upsertCapture } from '../storage/repositories/captureRepo';
-import { getOpenPass, listPasses } from '../storage/repositories/passRepo';
+import { getOpenPass, getPass, getRetakeByCapture, listPasses } from '../storage/repositories/passRepo';
 import { getSequence, lastSequence, listSequences, markPendingAsNoResponse } from '../storage/repositories/sequenceRepo';
 import {
   getCurrentSession,
   getSession,
+  getSessionDevice,
   listSessionDevices,
   listSyncedSessionIds,
   markAllDisconnected,
@@ -838,13 +839,20 @@ class ControllerRuntime {
     await this.refreshPassView();
   }
 
+  /**
+   * Fila de la captura en espera de su archivo (14.7 paso 7): sirve para contar las fotos que faltan llegar (PANT-19).
+   * Usa los datos reales de la pasada (lateral), del celular de la cámara (usuario) y de la repetición; cuando llega
+   * el archivo, consolidationService la completa con los metadatos de la cámara.
+   */
   private async ensurePendingCaptureRow(peer: Peer, env: Envelope, sequenceId: string, captureId: string): Promise<void> {
     if (await getCapture(captureId)) return;
     const seq = await getSequence(sequenceId);
     if (!seq || !peer.role) return;
     const ok = env.type === 'CAPTURE_OK' ? (env.payload as PayloadMap['CAPTURE_OK']) : null;
     const qe = env.type === 'QUALITY_ERROR' ? (env.payload as PayloadMap['QUALITY_ERROR']) : null;
-    const pass = this.pass && this.pass.passId === seq.passId ? this.pass : null;
+    const pass = this.pass && this.pass.passId === seq.passId ? this.pass : await getPass(seq.passId);
+    const device = await getSessionDevice(seq.sessionId, peer.deviceId);
+    const retake = await getRetakeByCapture(captureId);
     await upsertCapture({
       captureId,
       sequenceId,
@@ -854,7 +862,7 @@ class ControllerRuntime {
       isTest: false,
       deviceId: peer.deviceId,
       cameraRole: peer.role,
-      userId: useAppSession.getState().user?.id ?? '',
+      userId: device?.userId ?? useAppSession.getState().user?.id ?? '',
       capturedAt: ok?.capturedAt ?? qe?.capturedAt ?? nowIso(),
       filePath: null,
       sizeBytes: ok?.sizeBytes ?? null,
@@ -863,7 +871,7 @@ class ControllerRuntime {
       md5: ok?.md5 ?? null,
       qualityStatus: ok?.qualityStatus ?? qe?.qualityStatus ?? 'CAPTURED',
       qualityProfileVersion: ok?.profileVersion ?? qe?.profileVersion ?? CONFIG.quality.profileVersion,
-      replacesCaptureId: null,
+      replacesCaptureId: retake?.replacesCaptureId ?? null,
       localTransferStatus: 'PENDIENTE_LOCAL',
       remoteSyncStatus: 'PENDIENTE_NUBE',
       transferAttempts: 0,

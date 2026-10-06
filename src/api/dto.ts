@@ -1,11 +1,12 @@
-// src/api/dto.ts — Contrato esperado con Spring Boot /api/v1 (versión 1, maestro §15.3; a acordar con backend).
+// src/api/dto.ts — Contrato con la plataforma Django /api/v1 (maestro v2.0 §15.3 y docs/INTEGRACION_APP.md).
 //
 // QUÉ HACE: tipos de petición y respuesta de cada endpoint. El cliente real (httpClient + authApi,
-// bootstrapApi, syncApi) y el backend simulado (src/api/mock) implementan EXACTAMENTE estos tipos,
+// bootstrapApi, syncApi, uploadApi) y el backend simulado (src/api/mock) implementan EXACTAMENTE estos tipos,
 // así cambiar de simulado a real es solo cambiar EXPO_PUBLIC_USE_MOCK_API (sin tocar pantallas).
 //
-// INTEGRACIÓN FUTURA CON LA WEB / BASE DE DATOS: el backend Spring Boot guarda estos datos en PostgreSQL
-// y las fotos en S3. La app NUNCA habla con PostgreSQL ni S3 directamente (regla R-18).
+// Arquitectura v3.0 (D-24 a D-33): Django guarda los datos en Supabase y las fotos van a Cloudinary con un ticket
+// firmado por Django. La app NUNCA habla con Supabase ni conoce secretos de Cloudinary (R-18, R-21).
+// JSON en camelCase y fechas ISO-8601 UTC. Agregar campos al contrato sí; quitar o renombrar no (celulares en campo).
 
 import type {
   AccountStatus,
@@ -50,6 +51,10 @@ export type ApiErrorCode =
   | 'SEQUENCE_NOT_FOUND'
   | 'CAPTURE_CONFLICT'
   | 'PAYLOAD_TOO_LARGE'
+  | 'UPLOAD_SIGNATURE_INVALID' // v2.0: la firma de la respuesta de Cloudinary no es válida
+  | 'UPLOAD_NOT_FOUND' // v2.0: Django no encuentra en Cloudinary el recurso informado
+  | 'UPLOAD_MISMATCH' // v2.0: el recurso de Cloudinary no coincide con la captura (bytes o public_id)
+  | 'NOT_FOUND' // supuesto del servidor (W-04): GET /captures/{id} inexistente
   | 'INTERNAL_ERROR';
 
 export interface ApiErrorBody {
@@ -156,6 +161,11 @@ export interface SessionUpsertRequest {
     released: boolean;
   }[];
 }
+/** 201 la primera vez, 200 en un reenvío. */
+export interface SessionUpsertResponse {
+  sessionId: UUID;
+  status: Exclude<SessionStatus, 'SYNCED'>;
+}
 
 export interface PassUpsertRequest {
   passId: UUID;
@@ -183,6 +193,10 @@ export interface PassUpsertRequest {
     gpsTimestamp: ISODateString | null;
   }[];
 }
+export interface PassUpsertResponse {
+  passId: UUID;
+  status: PassStatus;
+}
 
 export interface SequenceDto {
   sequenceId: UUID;
@@ -207,7 +221,13 @@ export interface SequenceBatchRequest {
   sequences: SequenceDto[];
 }
 
-/** Parte "metadata" (JSON en texto) del multipart de POST /api/v1/captures/upload; la parte "file" es el JPEG. */
+/** Motivos de calidad que acepta el servidor (QUALITY_REASONS de api/v1/serializers.py). */
+export type ServerQualityReason = Exclude<QualityReason, 'CAMARA_EN_MOVIMIENTO'>;
+
+/**
+ * Metadatos de una captura. Mismos campos que en la v1.0 (parte "metadata" del multipart); desde la v2.0
+ * viajan en el campo `metadata` de CaptureConfirmRequest (POST /api/v1/captures/upload, JSON).
+ */
 export interface CaptureUploadMetadata {
   captureId: UUID;
   sequenceId: UUID;
@@ -223,7 +243,12 @@ export interface CaptureUploadMetadata {
   height: number;
   sizeBytes: number;
   md5: string;
-  quality: { status: QualityStatus; reasons: QualityReason[]; metrics: QualityMetrics | null; profileVersion: string };
+  quality: {
+    status: Exclude<QualityStatus, 'CAPTURED'>;
+    reasons: ServerQualityReason[];
+    metrics: QualityMetrics | null;
+    profileVersion: string;
+  };
   replacesCaptureId: UUID | null;
   /** Solo en repeticiones: contexto vigente cuando se pidió repetir (tabla retake_requests). */
   retakeContext: {
@@ -241,6 +266,70 @@ export interface CaptureUploadResponse {
   captureId: UUID;
   status: 'SINCRONIZADO';
   duplicate: boolean;
+}
+
+// ------------------------------------------------------------- subida directa a Cloudinary (v2.0, sección 15.7)
+/** Cuerpo de POST /api/v1/captures/{captureId}/upload-ticket. */
+export interface UploadTicketRequest {
+  captureId: UUID;
+  sessionId: UUID;
+  passId: UUID;
+  sequenceId: UUID;
+  sizeBytes: number;
+  md5: string;
+  mimeType: 'image/jpeg';
+}
+/** Datos para subir UNA foto a Cloudinary. La app envía `fields` tal cual, como parámetros del multipart. */
+export interface UploadTicket {
+  /** https://api.cloudinary.com/v1_1/<cloud_name>/image/upload (en dev: el Cloudinary simulado de la laptop). */
+  url: string;
+  /** api_key, timestamp, signature, public_id, type, overwrite (y lo que Django firme). La app no los interpreta. */
+  fields: Record<string, string>;
+  /** El mismo public_id que va en `fields`; la app lo usa para comprobar la respuesta. */
+  publicId: string;
+  /** timestamp firmado + 1 hora (vigencia de la firma en Cloudinary). */
+  expiresAt: ISODateString;
+  /** Límite de tamaño aceptado (plan de Cloudinary). */
+  maxBytes: number;
+}
+export interface UploadTicketResponse {
+  captureId: UUID;
+  /** true: Django ya tiene esta captura confirmada con el mismo md5 y tamaño; no se sube ni se confirma. */
+  alreadyConfirmed: boolean;
+  /** null solo cuando alreadyConfirmed = true. */
+  upload: UploadTicket | null;
+  /** Hora del servidor al emitir el ticket: la vigencia se mide contra ella, no contra el reloj del celular. */
+  serverTime: ISODateString;
+}
+/** Lo que la app guarda de la respuesta de Cloudinary (tabla remote_uploads) y reenvía a Django. */
+export interface CloudinaryUploadResult {
+  publicId: string;
+  version: number;
+  /** Firma de la respuesta (public_id + version) calculada por Cloudinary; Django la verifica. */
+  signature: string;
+  bytes: number;
+  format: string | null;
+  width: number | null;
+  height: number | null;
+  etag: string | null;
+  /** true si el public_id ya existía (overwrite = false) y Cloudinary devolvió el recurso existente. */
+  existing: boolean;
+}
+/** Cuerpo de POST /api/v1/captures/upload desde la v2.0 (JSON). */
+export interface CaptureConfirmRequest {
+  metadata: CaptureUploadMetadata;
+  cloudinary: Omit<CloudinaryUploadResult, 'existing'>;
+}
+/** GET /captures/{captureId} (diagnóstico). Nunca incluye URL de la foto ni resultados de la IA (§28.10). */
+export interface CaptureStatusResponse {
+  captureId: UUID;
+  status: 'SINCRONIZADO';
+  sessionId: UUID;
+  passId: UUID;
+  sequenceId: UUID;
+  sizeBytes: number;
+  md5: string;
+  confirmedAt: ISODateString;
 }
 
 export interface IncidentDto {

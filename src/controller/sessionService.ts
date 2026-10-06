@@ -7,7 +7,7 @@
 //  - finalizeClose(): CLOSING → CLOSED y, EN LA MISMA TRANSACCIÓN, crea los elementos de sync_queue (15.5);
 //    luego borra los archivos de la prueba corta (RN-21).
 //
-// INTEGRACIÓN FUTURA (Fase 4): los elementos de sync_queue los procesará src/sync/syncService.ts.
+// Fase 4: los elementos de sync_queue los procesa src/sync/syncService.ts (a mano en PANT-20 o solo con Wi-Fi).
 
 import { APP_VERSION, CONFIG, CONFIG_VERSION } from '../config';
 import { newId } from '../domain/ids';

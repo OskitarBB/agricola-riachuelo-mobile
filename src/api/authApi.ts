@@ -1,7 +1,8 @@
-// src/api/authApi.ts — Endpoints de autenticación contra el backend REAL (maestro §15.2).
+// src/api/authApi.ts — Endpoints de autenticación de la plataforma Django /api/v1/auth/* (maestro §7 y §15.2).
 //
 // QUÉ HACE: una función por endpoint. No guarda nada: authService decide qué hacer con la respuesta.
 // El backend simulado (src/api/mock/mockBackend.ts) implementa esta MISMA interfaz (AuthApi).
+// Django emite el JWT con SimpleJWT (access 15 min, refresh 14 días con rotación y lista negra, D-28).
 
 import type {
   ChangePasswordRequest,

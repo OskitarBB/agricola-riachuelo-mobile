@@ -338,3 +338,44 @@ export interface Incident {
   occurredAt: ISODateString;
   createdBy: 'SISTEMA' | 'OPERADOR';
 }
+
+// ------------------------------------------------ CFG-3: ciclos de monitoreo y áreas no hechas (migración 002, ADR 0004)
+// Código latente: las tablas existen (migración 002) y las funciones puras se prueban (__tests__/coverage.test.ts),
+// pero las pantallas todavía no lo usan; el ciclo vigente lo publicará la plataforma en el bootstrap.
+
+/** Ronda de monitoreo: lo terminado se bloquea dentro del ciclo; un ciclo nuevo libera todo. */
+export interface MonitoringCycle {
+  cycleId: UUID;
+  number: number;
+  startedAt: ISODateString;
+  startedByUserId: UUID | null;
+  note: string | null;
+}
+
+export type UncoveredKind = 'LOTE' | 'HILERA' | 'LATERAL';
+
+export type UncoveredReason =
+  | 'CLIMA'
+  | 'FALTA_TIEMPO'
+  | 'RIEGO_O_APLICACION'
+  | 'LABORES_CULTIVO'
+  | 'FALLA_EQUIPO'
+  | 'ACCESO_BLOQUEADO'
+  | 'INDICACION_SUPERVISOR'
+  | 'OTRO';
+
+/** Lote, hilera o lateral planificado que no se hizo, con su motivo (tabla uncovered_areas). */
+export interface UncoveredArea {
+  areaId: UUID;
+  sessionId: UUID;
+  cycleId: UUID | null;
+  kind: UncoveredKind;
+  lotId: string;
+  rowId: string | null;
+  lateralCode: LateralCode | null;
+  reason: UncoveredReason;
+  note: string | null;
+  userId: UUID | null;
+  createdAt: ISODateString;
+  remoteSyncStatus: RemoteSyncStatus;
+}

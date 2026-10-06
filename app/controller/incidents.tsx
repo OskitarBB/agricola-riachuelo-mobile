@@ -3,7 +3,8 @@
 // QUÉ HACE: lista las incidencias de la sesión actual (o las últimas) con tipo, severidad y hora; las
 // automáticas las genera el sistema (desconexión, calidad, batería, espacio, transferencia…). "Agregar
 // incidencia" abre un formulario (tipo, severidad, detalle) para registrar una manual (OPERADOR).
-// INTEGRACIÓN FUTURA: se envían al backend en lote al sincronizar (POST /sessions/{id}/incidents/batch).
+// Se envían a la plataforma en lotes al sincronizar (POST /api/v1/sessions/{id}/incidents/batch); una incidencia nueva
+// en una sesión ya sincronizada vuelve a poner su lote en la cola.
 
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
