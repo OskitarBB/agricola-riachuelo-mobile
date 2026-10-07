@@ -42,6 +42,31 @@ export function decideShortTest(
   return o.quality === 'REPETIR_NITIDEZ' || o.quality === 'REPETIR_EXPOSICION' ? 'APROBADA_CALIDAD' : 'REPROBADA';
 }
 
+/** Por qué se reprobó (se muestra en PANT-14 y queda en el registro). null si no está reprobada. */
+export type ShortTestFailReason =
+  | 'SIN_RESPUESTA'
+  | 'ERROR'
+  | 'RESPUESTA_LENTA'
+  | 'ERROR_CAMARA'
+  | 'FOTO_NO_LLEGO'
+  | 'DEMASIADO_LENTA'
+  | 'CALIDAD';
+
+export function shortTestFailReason(
+  o: ShortTestObservation,
+  cfg: { captureResponseTimeoutMs: number; shortTestTimeoutMs: number },
+  timedOut: boolean,
+): ShortTestFailReason | null {
+  if (o.response === null) return timedOut ? 'SIN_RESPUESTA' : null;
+  if (o.response === 'SIN_RESPUESTA') return 'SIN_RESPUESTA';
+  if (o.response === 'ERROR') return 'ERROR';
+  if (o.responseMs !== null && o.responseMs > cfg.captureResponseTimeoutMs) return 'RESPUESTA_LENTA';
+  if (o.quality === 'ERROR_CAMARA') return 'ERROR_CAMARA';
+  if (!o.transferred) return timedOut ? 'FOTO_NO_LLEGO' : null;
+  if (o.totalMs !== null && o.totalMs > cfg.shortTestTimeoutMs) return 'DEMASIADO_LENTA';
+  return decideShortTest(o, cfg) === 'REPROBADA' ? 'CALIDAD' : null;
+}
+
 export function isShortTestFinal(state: ShortTestCamState): boolean {
   return state === 'APROBADA' || state === 'APROBADA_CALIDAD' || state === 'REPROBADA';
 }

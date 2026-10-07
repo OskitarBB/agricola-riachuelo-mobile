@@ -73,6 +73,7 @@ import {
   decideShortTest,
   isShortTestFinal,
   isShortTestPassed,
+  shortTestFailReason,
   type ShortTestObservation,
   type ShortTestPending,
 } from './shortTest';
@@ -350,8 +351,13 @@ class ControllerRuntime {
       this.netUnsubs.push(
         this.server.onMessage((from, env) => this.onMessage(from, env)),
         this.server.onPeerClosed((peer, reason) => void this.enqueue(() => this.onPeerClosed(peer, reason))),
-        this.receiver.onCapture((meta, uri, remote) => this.enqueue(() => this.onFile(meta, uri, remote))),
+        this.receiver.onCapture((meta, uri, remote) => {
+          this.touchPeer(meta.deviceId);
+          return this.enqueue(() => this.onFile(meta, uri, remote));
+        }),
       );
+      // Una foto llegando prueba que la cámara está viva (una de 12 MP tarda unos segundos por Wi-Fi).
+      if (this.receiver.onActivity) this.netUnsubs.push(this.receiver.onActivity((deviceId) => this.touchPeer(deviceId)));
       if (this.server.onInvalid) {
         this.netUnsubs.push(
           this.server.onInvalid((from, detail, messageId) => {
@@ -383,7 +389,12 @@ class ControllerRuntime {
       useController.setState({ serverError: 'ERROR_INESPERADO' });
     }
     if (!this.heartbeatTimer)
-      this.heartbeatTimer = setInterval(() => void this.enqueue(() => this.heartbeatTick()), CONFIG.protocol.heartbeatIntervalMs);
+      this.heartbeatTimer = setInterval(() => {
+        // El HEARTBEAT sale directo del temporizador (no espera a la cola): si una tarea larga lo retrasara, las cámaras
+        // dejarían de recibir señal del controlador por más de protocol.lostAfterMs y cortarían la conexión.
+        this.sendHeartbeats();
+        void this.enqueue(() => this.heartbeatTick());
+      }, CONFIG.protocol.heartbeatIntervalMs);
   }
 
   private async stopServers(): Promise<void> {
@@ -475,12 +486,19 @@ class ControllerRuntime {
 
   // ============================================================== mensajes entrantes
 
+  /** La cámara dio señales de vida (mensaje o datos de una foto). Se anota AL INSTANTE, no en la cola de tareas. */
+  private touchPeer(deviceId: string): void {
+    const peer = this.peers.get(deviceId);
+    if (peer) peer.lastSeenMs = nowMs();
+  }
+
   private onMessage(from: PeerInfo, env: Envelope): void {
+    // Cualquier mensaje cuenta como señal de vida aunque la cola de tareas esté ocupada (p. ej. guardando una foto):
+    // si se anotara recién al procesarlo, el monitor marcaría la cámara PERDIDA por una demora propia.
+    this.touchPeer(from.deviceId);
     // Los ACK se resuelven al instante (las acciones del operador pueden estar esperándolos).
     if (env.type === 'ACK') {
       const p = env.payload as PayloadMap['ACK'];
-      const peer = this.peers.get(from.deviceId);
-      if (peer) peer.lastSeenMs = nowMs();
       if (p.ackType === 'MESSAGE' && p.refMessageId) {
         const pending = this.acks.get(p.refMessageId);
         if (pending) {
@@ -654,22 +672,32 @@ class ControllerRuntime {
 
   // ---------------------------------------------------------------- heartbeat y monitor (14.9)
 
-  private async heartbeatTick(): Promise<void> {
-    const now = nowMs();
-    const bat = useController.getState().ownBattery;
+  /** HEARTBEAT a cada cámara vinculada y conectada (14.9). */
+  private sendHeartbeats(): void {
+    const st = useController.getState();
     for (const peer of this.peers.values()) {
-      if (!peer.paired) continue;
-      if (peer.link === 'CONECTADA' || peer.link === 'INESTABLE') {
+      if (!peer.paired || (peer.link !== 'CONECTADA' && peer.link !== 'INESTABLE')) continue;
+      try {
         this.send(peer.deviceId, 'HEARTBEAT', {
           echoSentAt: null,
           role: 'CONTROLADOR',
-          batteryLevel: bat,
-          freeSpaceBytes: useController.getState().ownFreeSpace,
+          batteryLevel: st.ownBattery,
+          freeSpaceBytes: st.ownFreeSpace,
           pendingTransfers: 0,
-          lastSequenceId: useController.getState().lastSequence?.sequenceId ?? null,
+          lastSequenceId: st.lastSequence?.sequenceId ?? null,
           appState: 'active',
         });
+      } catch (err) {
+        logError('controller.heartbeat', err);
       }
+    }
+  }
+
+  /** Estado del enlace de cada cámara según el silencio (14.9). Corre en la cola: puede pausar la pasada. */
+  private async heartbeatTick(): Promise<void> {
+    const now = nowMs();
+    for (const peer of this.peers.values()) {
+      if (!peer.paired) continue;
       const next = linkFromSilence(peer.link, now - peer.lastSeenMs, CONFIG.protocol);
       if (next !== peer.link) await this.setLink(peer, next, 'heartbeat');
     }
@@ -1199,11 +1227,12 @@ class ControllerRuntime {
     const off2 = useController.getState().cameras.CAMERA_2.clockOffsetMs ?? 0;
     const offsetMs = c1 && c2 ? Math.abs(new Date(c1).getTime() - off1 - (new Date(c2).getTime() - off2)) : null;
     const view = useController.getState().shortTest;
+    const reasons = CAMERA_ROLES.map((r) => shortTestFailReason(run.obs[r], cfg, timedOut));
     useController.setState({
       shortTest: {
         ...view,
-        CAMERA_1: { ...view.CAMERA_1, state: states[0] },
-        CAMERA_2: { ...view.CAMERA_2, state: states[1] },
+        CAMERA_1: { ...view.CAMERA_1, state: states[0], detail: states[0] === 'REPROBADA' ? reasons[0] : null },
+        CAMERA_2: { ...view.CAMERA_2, state: states[1], detail: states[1] === 'REPROBADA' ? reasons[1] : null },
         running: false,
         passed,
         offsetMs,
@@ -1213,7 +1242,7 @@ class ControllerRuntime {
       passed ? 'INFO' : 'WARN',
       'SESSION',
       'SHORT_TEST',
-      { passed, states, offsetMs, obs: run.obs },
+      { passed, states, reasons, offsetMs, obs: run.obs, limits: cfg },
       this.session.sessionId,
     );
     if (passed) {

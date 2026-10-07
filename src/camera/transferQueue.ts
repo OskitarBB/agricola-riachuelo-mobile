@@ -26,6 +26,13 @@ export class TransferQueue {
   private target: { baseUrl: string; controllerDeviceId: string } | null = null;
   private running = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Inicio del envío en curso (null si no hay ninguno). */
+  private sendingSinceMs: number | null = null;
+
+  /** ¿Hay una foto viajando al controlador ahora? (el monitor de enlace es más tolerante mientras tanto). */
+  isSending(): boolean {
+    return this.sendingSinceMs !== null;
+  }
 
   constructor(private readonly sender: FileSender) {}
 
@@ -123,12 +130,17 @@ export class TransferQueue {
         await updateCapture(item.captureId, { localTransferStatus: 'TRANSFIRIENDO_LOCAL' });
         logEvent('DEBUG', 'TRANSFER', 'START', { captureId: item.captureId, attempt: item.attempts + 1 }, built.meta.sessionId);
         let response: LocalCaptureResponse | null = null;
+        const sendStarted = Date.now();
+        this.sendingSinceMs = sendStarted;
         try {
           response = await this.sender.send(this.target.baseUrl, built.meta, built.uri, CONFIG.transfer.requestTimeoutMs);
         } catch (err) {
           if (!(err instanceof TransferNetworkError)) logEvent('WARN', 'TRANSFER', 'SEND_EXCEPTION', { message: String(err) });
           response = null;
+        } finally {
+          this.sendingSinceMs = null;
         }
+        const sendMs = Date.now() - sendStarted;
         const decision = classifyLocalTransfer(
           response ? { networkError: false, response } : { networkError: true },
           item.checksumFailures,
@@ -142,7 +154,13 @@ export class TransferQueue {
             transferAttempts: attempts,
             lastError: null,
           });
-          logEvent('INFO', 'TRANSFER', 'OK', { captureId: item.captureId, attempts }, built.meta.sessionId);
+          logEvent(
+            'INFO',
+            'TRANSFER',
+            'OK',
+            { captureId: item.captureId, attempts, bytes: built.meta.sizeBytes, ms: sendMs, mp: Math.round((built.meta.width * built.meta.height) / 1e5) / 10 },
+            built.meta.sessionId,
+          );
         } else if (decision === 'REINTENTAR') {
           const isChecksum = response?.reason === 'MD5_MISMATCH' || response?.reason === 'SIZE_MISMATCH';
           const delay = nextDelayMs(attempts, CONFIG.transfer.retryDelaysMs, CONFIG.transfer.retryMaxDelayMs);

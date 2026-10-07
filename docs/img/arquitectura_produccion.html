@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Arquitectura en producción · piloto Agrícola Riachuelo</title>
+<style>
+  :root {
+    --ink: #0f172a; --text: #1e293b; --muted: #475569;
+    --blue: #3b6fe0; --blue-d: #1d4ed8; --blue-bg: #f3f7ff; --blue-chip: #e0e7ff;
+    --green: #22a35a; --green-d: #15803d; --green-bg: #f2fbf5; --green-chip: #dcfce7;
+    --violet: #8b5cf6; --violet-d: #6d28d9; --violet-bg: #f7f4ff; --violet-chip: #ede9fe;
+    --navy: #1e3a8a; --navy-bg: #f8faff;
+    --teal: #14b8a6; --teal-d: #0f766e; --teal-bg: #f0fdfa; --teal-chip: #ccfbf1;
+    --orange: #f97316; --orange-d: #c2410c; --orange-bg: #fff7ed; --orange-chip: #ffedd5;
+    --red: #ef4444; --red-d: #dc2626; --red-bg: #fff5f5;
+    --yellow: #eab308; --yellow-bg: #fffbea;
+    --slate-b: #d1d6e0; --slate-bg: #f1f5f9; --code: #eef1f4;
+    --pend: #c2410c; --ok: #15803d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #ffffff; }
+  body { width: 2000px; height: 2250px; position: relative; font-family: 'Inter', sans-serif; color: var(--text); -webkit-font-smoothing: antialiased; }
+  .abs { position: absolute; }
+  h1 { position: absolute; left: 0; width: 2000px; top: 22px; text-align: center; font-family: 'Inter Display', 'Inter', sans-serif; font-weight: 800; font-size: 56px; letter-spacing: -1.2px; color: var(--ink); }
+  .subtitle { position: absolute; top: 97px; left: 50%; transform: translateX(-50%); background: #eef2ff; border-radius: 10px; padding: 8px 26px; font-size: 21px; color: #334155; white-space: nowrap; }
+  .subtitle b { color: var(--ink); }
+  .card { position: absolute; border: 3px solid; border-radius: 16px; padding: 22px 24px; }
+  .card h2 { display: flex; align-items: center; gap: 12px; font-size: 31px; font-weight: 800; letter-spacing: -0.4px; margin-bottom: 10px; }
+  .card h2 svg { width: 34px; height: 34px; flex: none; }
+  .card .sub { font-size: 16.5px; font-weight: 700; margin: -8px 0 12px 2px; }
+  ul { list-style: none; }
+  li { position: relative; padding-left: 22px; font-size: 19px; line-height: 1.42; margin-bottom: 3px; }
+  li::before { content: ''; position: absolute; left: 4px; top: 11px; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); }
+  li.nodot { padding-left: 0; } li.nodot::before { display: none; }
+  code { font-family: 'DejaVu Sans Mono', monospace; font-size: 0.82em; background: var(--code); border-radius: 4px; padding: 1px 5px; color: #1f2937; white-space: nowrap; }
+  .pend { color: var(--pend); font-weight: 700; }
+  .ok { color: var(--ok); font-weight: 700; }
+  b { font-weight: 700; color: var(--ink); }
+  .chip { position: absolute; z-index: 5; border-radius: 10px; padding: 6px 13px; font-size: 17px; font-weight: 700; text-align: center; line-height: 1.25; white-space: nowrap; }
+  .new { display: inline-block; font-size: 12.5px; font-weight: 800; letter-spacing: .5px; color: #fff; background: var(--blue-d); border-radius: 6px; padding: 2px 7px; vertical-align: 3px; margin-left: 4px; }
+
+  /* tarjetas internas del VPS */
+  .inner { position: absolute; border: 2.5px solid #2b3445; border-radius: 12px; padding: 16px 18px; }
+  .inner h3 { display: flex; align-items: center; gap: 8px; font-size: 23px; white-space: nowrap; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 8px; }
+  .inner h3 svg { width: 28px; height: 28px; flex: none; }
+  .inner li { font-size: 17.5px; line-height: 1.38; }
+  .inner li::before { top: 10px; }
+
+  /* campo: red local */
+  .field { margin: 4px 0 14px; border: 2px dashed #93b4f5; border-radius: 12px; background: #ffffff; padding: 10px 14px 12px; }
+  .field .lbl { font-size: 15.5px; font-weight: 800; color: var(--blue-d); display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+  .field .lbl svg { width: 20px; height: 20px; }
+  .devs { display: flex; align-items: center; justify-content: space-between; }
+  .dev { display: flex; align-items: center; gap: 7px; border-radius: 10px; padding: 7px 10px; font-size: 16px; font-weight: 800; white-space: nowrap; }
+  .dev svg { width: 22px; height: 22px; }
+  .dev.cam { background: var(--blue-bg); border: 2px solid var(--blue); color: var(--blue-d); }
+  .dev.ctl { background: var(--navy); border: 2px solid var(--navy); color: #fff; }
+  .link { flex: 1; display: flex; flex-direction: column; align-items: center; margin: 0 6px; min-width: 0; }
+  .link .t { font-size: 13.5px; font-weight: 700; color: #334155; white-space: nowrap; }
+  .link svg { width: 100%; height: 14px; margin: 2px 0; }
+
+  /* ciclo de cambios */
+  .steps .grp { font-size: 15px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: var(--orange-d); margin: 4px 0 8px; }
+  .step { display: flex; gap: 12px; font-size: 18px; line-height: 1.38; margin-bottom: 10px; }
+  .num { flex: none; width: 28px; height: 28px; border-radius: 50%; background: #ea580c; color: #fff; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .note { background: #ffedd5; border-radius: 10px; padding: 10px 14px; font-size: 16.5px; color: var(--orange-d); line-height: 1.35; }
+
+  .estado div { font-size: 17.5px; font-weight: 700; line-height: 1.5; }
+
+  /* flujo */
+  .flow { position: absolute; border: 2px solid #e2e8f0; border-radius: 16px; background: #f8fafc; }
+  .flow .tab { position: absolute; left: -2px; top: -2px; background: var(--blue-d); color: #fff; font-size: 22px; font-weight: 800; padding: 10px 20px; border-radius: 14px 0 12px 0; }
+  .fcard { position: absolute; background: #fff; border: 2px solid #dfe4ec; border-radius: 12px; padding: 10px 10px 10px 12px; }
+  .fcard .hd { display: flex; align-items: center; gap: 7px; font-size: 16px; font-weight: 800; color: var(--ink); margin-bottom: 4px; white-space: nowrap; }
+  .fcard .hd svg { width: 22px; height: 22px; flex: none; }
+  .fcard .bd { font-size: 14.5px; line-height: 1.32; color: #475569; }
+  .farrow { position: absolute; font-size: 18px; color: var(--blue-d); font-weight: 800; }
+
+  .legend { position: absolute; border: 2px solid #e2e8f0; border-radius: 16px; background: #fff; padding: 16px 20px; }
+  .legend h4 { font-size: 20px; font-weight: 800; color: var(--navy); margin-bottom: 8px; }
+  .legend .row { display: flex; align-items: center; gap: 10px; font-size: 16.5px; line-height: 1.55; color: #1e293b; }
+  .legend svg { width: 62px; height: 12px; flex: none; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></symbol>
+    <symbol id="i-nav" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+    <symbol id="i-images" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 22H4a2 2 0 0 1-2-2V6"/><path d="m22 13-1.296-1.296a2.41 2.41 0 0 0-3.408 0L11 18"/><circle cx="12" cy="8" r="2"/><rect width="16" height="16" x="6" y="2" rx="2"/></symbol>
+    <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></symbol>
+    <symbol id="i-msg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-cam" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+    <symbol id="i-mobile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/></symbol>
+    <symbol id="i-ticket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  </defs>
+</svg>
+
+<h1>Arquitectura en producción: piloto Agrícola Riachuelo</h1>
+<div class="subtitle">Django + Supabase + Cloudinary publicada en <b>https://monitoreo.agricolariachuelo.org</b> sobre un VPS · app <b>v0.4.2</b> · actualizado 07/10/2026</div>
+
+<!-- ===================== FILA SUPERIOR ===================== -->
+<div class="card" style="left:20px; top:150px; width:830px; height:410px; border-color:var(--blue); background:var(--blue-bg);">
+  <h2 style="color:var(--blue-d)"><svg><use href="#i-phone"/></svg>Repositorio 1: App móvil</h2>
+  <div class="field">
+    <div class="lbl"><svg><use href="#i-wifi"/></svg>CAMPO · SIN INTERNET · Wi-Fi local (router o zona Wi-Fi) · vinculación por QR</div>
+    <div class="devs">
+      <div class="dev cam"><svg><use href="#i-cam"/></svg>CAMERA_1</div>
+      <div class="link">
+        <span class="t">órdenes · WS :8765</span>
+        <svg viewBox="0 0 200 14" preserveAspectRatio="none"><line x1="8" y1="7" x2="192" y2="7" stroke="#2563eb" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round"/><path d="M0 7 L10 1.5 L10 12.5 Z M200 7 L190 1.5 L190 12.5 Z" fill="#2563eb"/></svg>
+        <span class="t">fotos · HTTP :8766</span>
+      </div>
+      <div class="dev ctl"><svg><use href="#i-mobile"/></svg>CONTROLADOR</div>
+      <div class="link">
+        <span class="t">órdenes · WS :8765</span>
+        <svg viewBox="0 0 200 14" preserveAspectRatio="none"><line x1="8" y1="7" x2="192" y2="7" stroke="#2563eb" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round"/><path d="M0 7 L10 1.5 L10 12.5 Z M200 7 L190 1.5 L190 12.5 Z" fill="#2563eb"/></svg>
+        <span class="t">fotos · HTTP :8766</span>
+      </div>
+      <div class="dev cam"><svg><use href="#i-cam"/></svg>CAMERA_2</div>
+    </div>
+  </div>
+  <ul>
+    <li>React Native + Expo · <b>v0.4.2</b> · offline-first (SQLite + fotos en el celular)</li>
+    <li>Solo el <b>CONTROLADOR</b> sincroniza: cola por sesión, automática con Wi-Fi o «Sincronizar ahora»; las cámaras solo inician sesión</li>
+    <li class="ok" style="color:var(--ok)">✔ Foto directa a Cloudinary con ticket firmado (v2.0) · multipart v1 solo de respaldo</li>
+    <li><code>EXPO_PUBLIC_API_URL=https://monitoreo.agricolariachuelo.org</code> · APK EAS «piloto»</li>
+  </ul>
+</div>
+
+<div class="card" style="left:870px; top:150px; width:560px; height:410px; border-color:var(--green); background:var(--green-bg);">
+  <h2 style="color:var(--green-d)"><svg><use href="#i-grid"/></svg>Web de revisión (navegador)</h2>
+  <ul>
+    <li>Especialista · Supervisor · Administrador</li>
+    <li>Bandeja, caso con cajas, mapa, plano, reportes</li>
+    <li>Sesión Django + CSRF · cookies seguras · HSTS</li>
+    <li>Actividad en vivo: inicios de sesión y sesiones de la app</li>
+    <li>Aprueba operadores · revoca celulares de la app</li>
+    <li>Fotos: el navegador las pide al CDN de Cloudinary con URL firmada</li>
+    <li class="ok">✔ Administrador creado · gestión en <code>/gestion/</code></li>
+  </ul>
+</div>
+
+<div class="card" style="left:1450px; top:150px; width:530px; height:410px; border-color:var(--violet); background:var(--violet-bg);">
+  <h2 style="color:var(--violet-d)"><svg><use href="#i-nav"/></svg>Dominio y DNS · Hostinger</h2>
+  <ul>
+    <li><b>agricolariachuelo.org</b> · activo hasta 05/10/2027</li>
+    <li>Registro <b>A</b> <code>monitoreo</code> → <code>179.198.103.82</code> · TTL 300</li>
+    <li>Nameservers <code>lunar/solar.dns-parking.com</code></li>
+    <li>🔒 Certificado <b>Let's Encrypt</b> · se renueva solo</li>
+  </ul>
+</div>
+
+<!-- chips entre la fila superior y el VPS -->
+<div class="chip" style="left:330px; top:570px; background:var(--blue-chip); color:var(--blue-d);">HTTPS / REST · JWT · /api/v1<br>solo el controlador envía datos</div>
+<div class="chip" style="left:965px; top:572px; background:var(--green-chip); color:var(--green-d);">HTTPS<br>sesión Django</div>
+<div class="chip" style="left:1290px; top:572px; background:#e2e8f0; color:#1e293b;">DNS: monitoreo<br>→ 179.198.103.82</div>
+<div class="chip" style="left:24px; top:860px; background:var(--violet-chip); color:var(--violet-d); padding:8px 10px;">v2.0 ✔<br>foto directa<br>con ticket</div>
+
+<!-- ===================== VPS ===================== -->
+<div class="abs" style="left:150px; top:640px; width:1360px; height:622px; border:3px solid var(--navy); border-radius:16px; background:var(--navy-bg); overflow:hidden;">
+  <div style="background:var(--navy); height:62px; display:flex; align-items:center; padding:0 22px; color:#fff;">
+    <svg style="width:34px;height:34px;margin-right:14px"><use href="#i-server"/></svg>
+    <span style="font-size:28px; font-weight:800; letter-spacing:-0.4px; white-space:nowrap">VPS Hostinger KVM 1 · Ubuntu 24.04 · 1 vCPU · 3,8 GB · 179.198.103.82</span>
+    <span style="margin-left:auto; font-size:17px; font-style:italic; opacity:.9; white-space:nowrap">Docker · proyecto «riachuelo»</span>
+  </div>
+</div>
+<div class="inner" style="left:170px; top:718px; width:1320px; height:90px; background:var(--slate-bg); border-color:#2b3445;">
+  <div style="display:flex; align-items:center; gap:8px; font-size:24px; font-weight:800; color:var(--ink)"><svg style="width:26px;height:26px"><use href="#i-shield"/></svg>Traefik · proxy HTTPS <span style="font-size:17px; font-weight:700; color:var(--muted)">(entrada única desde internet)</span></div>
+  <div style="font-size:18px; margin-top:4px">Puertos 80 → 443 (redirección) · <code>Host(monitoreo.agricolariachuelo.org)</code> → contenedor web <code>:8000</code> · certificados Let's Encrypt (HTTP-01) · modo host</div>
+</div>
+<div class="chip" style="left:415px; top:822px; background:#e2e8f0; color:#1e293b;">Host → web:8000</div>
+
+<div class="inner" style="left:170px; top:868px; width:440px; height:322px; background:var(--blue-bg);">
+  <h3 style="color:var(--blue-d)"><svg><use href="#i-server"/></svg>Contenedor web · Django + DRF</h3>
+  <ul>
+    <li>gunicorn: 2 procesos × 4 hilos · aplica migraciones al arrancar</li>
+    <li>API <code>/api/v1</code>: JWT 15 min + renovación 14 d · <code>X-Device-Id</code></li>
+    <li><b>Ticket:</b> firma public_id · type · overwrite · timestamp (vale 1 h)</li>
+    <li><b>Confirmación:</b> verifica la firma → captura + tarea IA en 1 transacción</li>
+    <li>Salud <code>/api/v1/health</code> · tope <b>700 MB · 0,8 CPU</b></li>
+  </ul>
+</div>
+<div class="inner" style="left:625px; top:868px; width:430px; height:322px; background:var(--violet-bg);">
+  <h3 style="color:var(--violet-d)"><svg><use href="#i-cpu"/></svg>Contenedor worker IA</h3>
+  <ul>
+    <li><code>worker_ia</code>: cola <code>ai_tasks</code> (SKIP LOCKED)</li>
+    <li>Solo fotos aceptadas por calidad (UTILIZABLE o revisión técnica)</li>
+    <li class="pend">⏳ YOLO ONNX en <code style="color:var(--pend)">deploy/modelos/</code> + modelo activo en <code style="color:var(--pend)">/gestion/</code></li>
+    <li>Sin modelo: las fotos esperan; al activarlo procesa las pendientes</li>
+    <li>Tope <b>1,2 GB · 0,7 CPU</b></li>
+  </ul>
+</div>
+<div class="inner" style="left:1070px; top:868px; width:420px; height:322px; background:#ffffff; border-color:#64748b;">
+  <h3 style="color:#334155"><svg><use href="#i-gear"/></svg>Operación del servidor</h3>
+  <ul>
+    <li><code>actualizar.sh</code>: git pull → imagen → migraciones</li>
+    <li><code>docker compose logs -f</code>: consola en vivo</li>
+    <li><code>diagnostico</code>: BD, Cloudinary, IA y cola</li>
+    <li><code>/gestion/</code>: catálogos y modelo de IA</li>
+    <li><code>desinstalar.sh</code>: retira todo al terminar</li>
+  </ul>
+</div>
+<div class="abs" style="left:170px; top:1200px; width:1320px; height:52px; background:var(--blue-chip); border-radius:10px; padding:5px 14px; font-size:16px; line-height:1.4; color:#1e3a8a;">
+  <b style="color:#1e3a8a">Aislamiento:</b> usuario sin privilegios (uid 10001) · sistema de archivos de solo lectura · sin capacidades de Linux · red <code>riachuelo-proxy</code> · logs 10 MB × 3 · secretos solo en <code>/srv/riachuelo/deploy/.env.piloto</code> (600)
+</div>
+
+<!-- chips entre el VPS y la fila inferior -->
+<div class="chip" style="left:180px; top:1283px; background:#f3f0ff; color:#7c6bb0; border:1.5px dashed #b9a7f0;">respaldo v1:<br>Django sube la foto</div>
+<div class="chip" style="left:470px; top:1279px; background:var(--green-chip); color:var(--green-d);">SQL · captura + tarea</div>
+<div class="chip" style="left:310px; top:1347px; background:var(--orange-chip); color:var(--orange-d);">descarga el original</div>
+<div class="chip" style="left:740px; top:1309px; background:var(--orange-chip); color:var(--orange-d);">toma tareas · guarda resultados</div>
+<div class="chip" style="left:1160px; top:1299px; background:var(--teal-chip); color:var(--teal-d);">solo tras confirmar</div>
+
+<!-- ===================== FILA INFERIOR ===================== -->
+<div class="card" style="left:20px; top:1412px; width:455px; height:430px; border-color:var(--teal); background:var(--teal-bg);">
+  <h2 style="color:var(--teal-d)"><svg><use href="#i-images"/></svg>Cloudinary</h2>
+  <div class="sub" style="color:var(--teal-d)">Fotos de evidencia · cloud wd9meyw0</div>
+  <ul>
+    <li>Carpeta <code>riachuelo/piloto/‹sesión›/‹pasada›/‹foto›</code></li>
+    <li>La app sube directo con el ticket; la clave API (dedicada al piloto) queda en el servidor</li>
+    <li>Privadas (authenticated) · <code>overwrite=false</code>: subir dos veces no duplica</li>
+    <li>Miniatura 400 px · revisión 1600 px por CDN con URL firmada</li>
+  </ul>
+</div>
+
+<div class="card" style="left:495px; top:1412px; width:560px; height:430px; border-color:var(--blue); background:var(--blue-bg);">
+  <h2 style="color:var(--blue-d)"><svg><use href="#i-db"/></svg>Supabase · riachuelo-piloto</h2>
+  <div class="sub" style="color:var(--blue)">PostgreSQL · São Paulo (sa-east-1) · BD única del piloto</div>
+  <ul>
+    <li>38 tablas creadas por las migraciones · sin datos demo</li>
+    <li>RLS + REVOKE: sin acceso público, solo Django</li>
+    <li>44 CHECK · auditoría solo-inserción · TLS 5432</li>
+    <li>Catálogos: 3 lotes y 83 hileras reales (Anexo D)</li>
+  </ul>
+  <div style="margin-top:10px; border:2.5px solid var(--orange); background:var(--orange-bg); border-radius:12px; padding:9px 14px;">
+    <div style="font-size:20px; font-weight:800; color:var(--orange-d)">Cola de análisis</div>
+    <div style="font-size:16.5px; line-height:1.35">Tabla <b style="color:var(--orange-d)">ai_tasks</b>: la tarea se crea en la misma transacción que la captura, solo si la foto fue aceptada por calidad.</div>
+  </div>
+</div>
+
+<div class="card" style="left:1075px; top:1412px; width:435px; height:430px; border-color:var(--green); background:var(--green-bg);">
+  <h2 style="color:var(--green-d)"><svg><use href="#i-msg"/></svg>WhatsApp Cloud API</h2>
+  <div class="sub" style="color:var(--green-d)">Aviso externo · <span class="pend">⏳ pendiente</span></div>
+  <ul>
+    <li>Solo después de que el especialista confirma</li>
+    <li>Hoy: el aviso se escribe en el log del worker</li>
+    <li>Falta: token, phone id y plantilla <code>caso_confirmado</code> aprobada</li>
+  </ul>
+</div>
+
+<!-- ===================== COLUMNA DERECHA ===================== -->
+<div class="card steps" style="left:1530px; top:640px; width:450px; height:575px; border-color:var(--orange); background:var(--orange-bg);">
+  <h2 style="color:var(--orange-d); font-size:27px; white-space:nowrap"><svg><use href="#i-refresh"/></svg>Ciclo de cambios · GitHub</h2>
+  <div class="grp">Plataforma · agricola-riachuelo-platform</div>
+  <div class="step"><span class="num">1</span><span>En la PC: probar con <code>iniciar.bat</code> (BD de desarrollo con datos demo)</span></div>
+  <div class="step"><span class="num">2</span><span><code>git push</code> → rama <b>prueba2</b></span></div>
+  <div class="step"><span class="num">3</span><span>VPS: <code>git pull</code> + <code>bash deploy/actualizar.sh</code> → imagen, migraciones y reinicio (~1–2 min)</span></div>
+  <div class="grp" style="margin-top:8px">App · agricola-riachuelo-mobile <span class="new">NUEVO</span></div>
+  <div class="step"><span class="num">4</span><span><code>git push</code> → rama <b>fase4-sincronizacion</b></span></div>
+  <div class="step"><span class="num">5</span><span><code>npm run build:apk:piloto</code> → APK en EAS (Expo)</span></div>
+  <div class="step"><span class="num">6</span><span>El mismo APK en los <b>3 celulares</b> (misma versión)</span></div>
+  <div class="note"><b style="color:var(--orange-d)">Nunca viajan por Git:</b> <code>.env.piloto</code>, el modelo YOLO, contraseñas ni datos</div>
+</div>
+
+<div class="card" style="left:1530px; top:1235px; width:450px; height:350px; border-color:var(--red); background:var(--red-bg);">
+  <h2 style="color:var(--red-d)"><svg><use href="#i-alert"/></svg>Regla de arquitectura</h2>
+  <ul>
+    <li style="font-size:18px">App y navegador solo hablan con Django por <b>HTTPS</b>; nunca con Supabase</li>
+    <li style="font-size:18px">En el campo, las cámaras solo hablan con el controlador</li>
+    <li style="font-size:18px">La foto no pasa por Django: solo firma y confirma</li>
+    <li style="font-size:18px">Secretos solo en el servidor, nunca en la app ni en Git</li>
+    <li style="font-size:18px">YOLO no es un servicio aparte; la sincronización no lo espera</li>
+  </ul>
+</div>
+
+<div class="card estado" style="left:1530px; top:1605px; width:450px; height:370px; border-color:var(--yellow); background:var(--yellow-bg);">
+  <h2 style="color:var(--ink)"><span style="font-size:30px">⭐</span>Estado del piloto</h2>
+  <div class="ok">✔ Web y API en HTTPS · admin creado</div>
+  <div class="ok">✔ Supabase y Cloudinary conectados</div>
+  <div class="ok">✔ App v0.4.2: sincronización + ticket v2.0</div>
+  <div class="ok">✔ Lotes e hileras reales cargados</div>
+  <div class="pend">⏳ Prueba de campo con los 3 celulares</div>
+  <div class="pend">⏳ Segmentos y marcadores reales</div>
+  <div class="pend">⏳ YOLO · WhatsApp</div>
+  <div class="pend">⏳ Especialistas y destinatarios</div>
+  <div class="pend">⏳ <code style="color:var(--pend)">API_SUBIDA_MULTIPART=false</code></div>
+  <div class="pend">⏳ Supabase solo desde la IP del VPS</div>
+</div>
+
+<!-- ===================== FLUJO ===================== -->
+<div class="flow" style="left:20px; top:1872px; width:1490px; height:355px;">
+  <div class="tab">Flujo de una foto en producción</div>
+</div>
+
+<!-- ===================== LEYENDA ===================== -->
+<div class="legend" style="left:1530px; top:1995px; width:450px; height:232px; padding:12px 18px;">
+  <h4>Leyenda de flechas</h4>
+</div>
+
+<!-- capa de flechas -->
+<svg class="abs" style="left:0; top:0; pointer-events:none; z-index:1" width="2000" height="2250" viewBox="0 0 2000 2250" id="arrows"></svg>
+
+<script>
+// ---------- tarjetas del flujo (dos filas) ----------
+const flow = [
+  ['i-cam', '1 · Cámara 1 y 2', 'toma la foto y evalúa la calidad · sin internet'],
+  ['i-wifi', '2 · Controlador', 'la recibe por Wi-Fi local, verifica md5 y la guarda (SQLite)'],
+  ['i-shield', '3 · HTTPS', 'cuando hay internet · Traefik en monitoreo…org'],
+  ['i-ticket', '4 · Ticket', 'Django valida y firma la subida (solo JSON)'],
+  ['i-images', '5 · Cloudinary', 'subida directa desde el controlador'],
+  ['i-check', '6 · Confirmación', 'Django verifica la firma; idempotente por captureId'],
+  ['i-db', '7 · Supabase', 'captura + tarea de IA en 1 transacción'],
+  ['i-cpu', '8 · YOLO ⏳', 'el worker guarda cajas y confianza'],
+  ['i-grid', '9 · Web', 'el especialista revisa y decide'],
+  ['i-msg', '10 · WhatsApp ⏳', 'solo si el especialista confirma'],
+];
+const F = document.querySelector('.flow');
+const cw = 268, ch = 118, gx = 26, x0 = 18, y0 = 70, gy = 24;
+flow.forEach((f, i) => {
+  const row = i < 5 ? 0 : 1, col = row ? i - 5 : i;
+  const d = document.createElement('div');
+  d.className = 'fcard';
+  d.style.cssText = `left:${x0 + col * (cw + gx)}px; top:${y0 + row * (ch + gy)}px; width:${cw}px; height:${ch}px`;
+  d.innerHTML = `<div class="hd" style="color:var(--blue-d)"><svg><use href="#${f[0]}"/></svg><span style="color:var(--ink)">${f[1]}</span></div><div class="bd">${f[2]}</div>`;
+  F.appendChild(d);
+  if (col < 4) {
+    const a = document.createElement('div');
+    a.className = 'farrow';
+    a.textContent = '→';
+    a.style.cssText = `left:${x0 + col * (cw + gx) + cw + 4}px; top:${y0 + row * (ch + gy) + ch / 2 - 13}px`;
+    F.appendChild(a);
+  }
+});
+
+// ---------- leyenda ----------
+const legend = [
+  ['#2563eb', '', 'App / web → Django (HTTPS)'],
+  ['#16a34a', '', 'Django ↔ Supabase (SQL TLS)'],
+  ['#7c3aed', '9 6', 'Foto → Cloudinary (atenuada: respaldo v1)'],
+  ['#2563eb', '2 6', 'Wi-Fi local: cámaras ↔ controlador'],
+  ['#ea580c', '9 6', 'Worker: tareas y fotos · despliegue'],
+  ['#0d9488', '', 'Aviso externo (WhatsApp)'],
+  ['#334155', '9 6', 'DNS / proxy HTTPS'],
+];
+const L = document.querySelector('.legend');
+legend.forEach(([c, dash, t]) => {
+  const r = document.createElement('div');
+  r.className = 'row';
+  r.innerHTML = `<svg viewBox="0 0 62 12"><line x1="2" y1="6" x2="50" y2="6" stroke="${c}" stroke-width="3.5" ${dash ? `stroke-dasharray="${dash}"` : ''} stroke-linecap="${dash === '2 6' ? 'round' : 'butt'}"/><path d="M50 1 L60 6 L50 11 Z" fill="${c}"/></svg><span>${t}</span>`;
+  L.appendChild(r);
+});
+
+// ---------- flechas ----------
+const S = document.getElementById('arrows');
+const NS = 'http://www.w3.org/2000/svg';
+function head(x, y, dir, color) {
+  const s = 11, w = 9;
+  const pts = {
+    down: [[x, y], [x - w, y - s * 1.6], [x + w, y - s * 1.6]],
+    up: [[x, y], [x - w, y + s * 1.6], [x + w, y + s * 1.6]],
+    left: [[x, y], [x + s * 1.6, y - w], [x + s * 1.6, y + w]],
+    right: [[x, y], [x - s * 1.6, y - w], [x - s * 1.6, y + w]],
+  }[dir];
+  const p = document.createElementNS(NS, 'polygon');
+  p.setAttribute('points', pts.map((q) => q.join(',')).join(' '));
+  p.setAttribute('fill', color);
+  S.appendChild(p);
+}
+function line(points, color, { dash = null, width = 4.5, end = 'down', start = null, opacity = 1 } = {}) {
+  const pl = document.createElementNS(NS, 'polyline');
+  // acorta el final para que la punta no quede bajo la línea
+  const pts = points.map((p) => [...p]);
+  const sh = (a, b, n) => { const dx = Math.sign(b[0] - a[0]), dy = Math.sign(b[1] - a[1]); a[0] += dx * n; a[1] += dy * n; };
+  if (end) { const L2 = pts.length; sh(pts[L2 - 1], pts[L2 - 2], 14); }
+  if (start) sh(pts[0], pts[1], 14);
+  pl.setAttribute('points', pts.map((p) => p.join(',')).join(' '));
+  pl.setAttribute('fill', 'none');
+  pl.setAttribute('stroke', color);
+  pl.setAttribute('stroke-width', width);
+  pl.setAttribute('stroke-linejoin', 'round');
+  if (dash) pl.setAttribute('stroke-dasharray', dash);
+  pl.setAttribute('opacity', opacity);
+  S.appendChild(pl);
+  const g = document.createElementNS(NS, 'g');
+  g.setAttribute('opacity', opacity);
+  S.appendChild(g);
+  if (end) { const [x, y] = points[points.length - 1]; head(x, y, end, color); }
+  if (start) { const [x, y] = points[0]; head(x, y, start, color); }
+}
+// fila superior → VPS
+line([[620, 560], [620, 640]], '#2563eb');
+line([[1150, 560], [1150, 640]], '#16a34a');
+line([[1480, 560], [1480, 640]], '#334155', { dash: '9 7' });
+// app → Cloudinary (v2.0 directa)
+line([[85, 560], [85, 1412]], '#7c3aed', { dash: '10 8' });
+// Traefik → Django
+line([[385, 808], [385, 868]], '#334155', { width: 4 });
+// VPS → fila inferior
+line([[275, 1262], [275, 1412]], '#7c3aed', { dash: '10 8', opacity: 0.45 });
+line([[560, 1262], [560, 1412]], '#16a34a', { start: 'up' });
+line([[700, 1262], [700, 1363], [520, 1363]], '#ea580c', { dash: '10 8', end: null, start: 'up' });
+line([[420, 1363], [420, 1412]], '#ea580c', { dash: '10 8', end: null });
+line([[880, 1262], [880, 1412]], '#ea580c', { dash: '10 8', start: 'up' });
+line([[1030, 1262], [1030, 1283], [1290, 1283], [1290, 1412]], '#0d9488');
+// ciclo de cambios → VPS
+line([[1530, 760], [1510, 760]], '#ea580c', { end: 'left', width: 4 });
+</script>
+</body>
+</html>

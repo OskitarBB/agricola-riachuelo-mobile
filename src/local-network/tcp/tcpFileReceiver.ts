@@ -59,8 +59,16 @@ function rejected(reason: LocalCaptureResponse['reason']): UploadResult {
 export class TcpFileReceiver implements FileReceiver {
   private server: TcpServer | null = null;
   private handler: Handler | null = null;
+  private activity: ((deviceId: string) => void) | null = null;
 
-  constructor(private readonly tcp: TcpModule) {}
+  /**
+   * @param report registro de cada recepción (bytes y ms; Q-15). Lo pasa factory.ts con logEvent: este archivo no
+   * importa el registro de eventos para que __tests__/httpUpload.test.ts no cargue SQLite.
+   */
+  constructor(
+    private readonly tcp: TcpModule,
+    private readonly report: (data: Record<string, unknown>, sessionId: string) => void = () => undefined,
+  ) {}
 
   async start(port: number): Promise<void> {
     if (this.server) await this.stop();
@@ -107,6 +115,20 @@ export class TcpFileReceiver implements FileReceiver {
     deleteFileIfExists(file.uri);
     file.create({ intermediates: true });
     const handle: FileHandle = file.open(FileMode.WriteOnly);
+    const started = Date.now();
+    let bytes = 0;
+    let lastActivity = 0;
+    const touch = () => {
+      const now = Date.now();
+      if (now - lastActivity < 1_000) return;
+      lastActivity = now;
+      try {
+        this.activity?.(meta.deviceId);
+      } catch {
+        // solo es una señal de vida
+      }
+    };
+    touch();
     let closed = false;
     const close = () => {
       if (!closed) {
@@ -119,9 +141,19 @@ export class TcpFileReceiver implements FileReceiver {
       }
     };
     return {
-      write: (chunk) => handle.writeBytes(chunk),
+      write: (chunk) => {
+        handle.writeBytes(chunk);
+        bytes += chunk.length;
+        touch();
+      },
       finish: async () => {
         close();
+        // Tamaño y duración de cada recepción (Q-15: medir fotos reales en campo).
+        try {
+          this.report({ captureId: meta.captureId, role: meta.cameraRole, bytes, ms: Date.now() - started }, meta.sessionId);
+        } catch {
+          // solo es un registro
+        }
         if (!this.handler) return rejected('INTERNAL');
         try {
           const res = await this.handler(meta, file.uri, remote);
@@ -143,6 +175,13 @@ export class TcpFileReceiver implements FileReceiver {
     const s = this.server;
     this.server = null;
     if (s) await new Promise<void>((resolve) => s.close(() => resolve()));
+  }
+
+  onActivity(handler: (deviceId: string) => void): Unsubscribe {
+    this.activity = handler;
+    return () => {
+      if (this.activity === handler) this.activity = null;
+    };
   }
 
   onCapture(handler: Handler): Unsubscribe {

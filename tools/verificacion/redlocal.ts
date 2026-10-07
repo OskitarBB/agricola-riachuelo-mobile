@@ -131,7 +131,10 @@ async function main() {
     await until(() => closed.some((c) => c.startsWith(camId)));
   });
 
-  const receiver = new TcpFileReceiver(tcp);
+  const reports: { bytes: number; ms: number }[] = [];
+  const activity: string[] = [];
+  const receiver = new TcpFileReceiver(tcp, (d: { bytes: number; ms: number }) => reports.push(d));
+  receiver.onActivity((id: string) => activity.push(id));
   let filePort = 0;
   const got: { captureId: string; md5: string; size: number; remote: string | null }[] = [];
   receiver.onCapture(async (meta: { captureId: string; md5: string; sizeBytes: number }, uri: string, remote: string | null) => {
@@ -142,7 +145,7 @@ async function main() {
     return { result: 'RECEIVED', reason: null };
   });
 
-  await step('foto cámara → controlador: POST binario de 2 MB, md5 y tamaño verificados (opción A, §14.8)', async () => {
+  await step('foto cámara → controlador: POST binario de 2 MB, md5 y tamaño verificados, señal de vida y registro (§14.8)', async () => {
     filePort = port + 1;
     await receiver.start(filePort);
     const bytes = Buffer.alloc(2 * 1024 * 1024);
@@ -162,6 +165,10 @@ async function main() {
     assert.equal(got.length, 1);
     assert.equal(got[0].md5, md5);
     assert.equal(got[0].size, bytes.length);
+    // Señal de vida de la cámara mientras llega la foto y registro de bytes y duración (Q-15).
+    assert.ok(activity.includes(camId), 'onActivity con el deviceId de la cámara');
+    assert.equal(reports[0]?.bytes, bytes.length);
+    console.log(`      (2 MB recibidos en ${reports[0]?.ms} ms)`);
   });
 
   await step('foto con metadatos inválidos: 400 INVALID_META (la cámara no reintenta a ciegas)', async () => {

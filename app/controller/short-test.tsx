@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { CONFIG } from '../../src/config';
 import { controllerRuntime } from '../../src/controller/controllerRuntime';
 import { useController, type ShortTestCamResult } from '../../src/controller/controllerStore';
 import { AppButton } from '../../src/ui/components/AppButton';
@@ -22,6 +23,27 @@ import { messageFor } from '../../src/ui/messages';
 import { QUALITY_LABEL, ROLE_LABEL, S } from '../../src/ui/strings';
 import { colors, font, qualityTone, radius, type Tone } from '../../src/ui/theme';
 import { showToast } from '../../src/ui/toast';
+
+const secs = (ms: number | null) => (ms === null ? '—' : `${(ms / 1000).toFixed(1)} s`);
+
+/** Motivo de la reprobación en palabras simples (shortTestFailReason). */
+function reasonText(r: ShortTestCamResult): string {
+  const R = S.shortTest.reasons;
+  switch (r.detail) {
+    case 'RESPUESTA_LENTA':
+      return R.RESPUESTA_LENTA(secs(r.responseMs), secs(CONFIG.protocol.captureResponseTimeoutMs));
+    case 'DEMASIADO_LENTA':
+      return R.DEMASIADO_LENTA(secs(r.totalMs), secs(CONFIG.shortTest.timeoutMs));
+    case 'SIN_RESPUESTA':
+    case 'ERROR':
+    case 'ERROR_CAMARA':
+    case 'FOTO_NO_LLEGO':
+    case 'CALIDAD':
+      return R[r.detail];
+    default:
+      return r.detail ?? '';
+  }
+}
 
 function stateView(r: ShortTestCamResult): { label: string; tone: Tone } {
   switch (r.state) {
@@ -105,6 +127,7 @@ export default function ShortTestScreen() {
                     : '—'
               }
             />
+            {r.state === 'REPROBADA' && r.detail ? <Text style={styles.reason}>{reasonText(r)}</Text> : null}
           </Card>
         );
       })}
@@ -127,6 +150,7 @@ export default function ShortTestScreen() {
 }
 
 const styles = StyleSheet.create({
+  reason: { marginTop: 8, fontSize: font.body, fontWeight: '700', color: colors.error },
   dash: { fontSize: font.body, color: colors.text },
   warn: {
     backgroundColor: colors.warnBg,

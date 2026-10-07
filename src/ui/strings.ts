@@ -236,6 +236,16 @@ export const S = {
     failed: 'Reprobada',
     running: 'En curso',
     notRun: 'Sin ejecutar',
+    reason: 'Motivo',
+    reasons: {
+      SIN_RESPUESTA: 'La cámara no respondió a la orden',
+      ERROR: 'La cámara respondió con un error',
+      RESPUESTA_LENTA: (s: string, max: string) => `Respondió en ${s} (máximo ${max})`,
+      ERROR_CAMARA: 'La cámara no pudo tomar la foto',
+      FOTO_NO_LLEGO: 'La foto no llegó al controlador a tiempo',
+      DEMASIADO_LENTA: (s: string, max: string) => `Tardó ${s} en total (máximo ${max})`,
+      CALIDAD: 'La calidad de la foto no se pudo evaluar',
+    },
   },
   newPass: {
     title: 'Nueva pasada',

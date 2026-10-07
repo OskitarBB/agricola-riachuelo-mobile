@@ -1,3 +1,44 @@
+# Informe de avance — App móvil v0.4.3 (formato maestro §23.2)
+
+**Tarea:** segunda prueba con tres Android (prueba corta). **Fecha:** 2026-10-07 · **CFG-5** · esquema SQLite 4.
+
+## Qué se vio
+Las dos cámaras respondieron CAPTURE_OK, UTILIZABLE y la foto llegó, pero la prueba corta quedó «Reprobada»: tardó
+18,5 s con un límite de 15 s, y las cámaras mostraron «Sin conexión con el controlador — en pausa» y se reconectaron.
+
+## Causas y cambios
+- **Fotos a la resolución máxima del sensor:** sin `pictureSize`, Android toma la foto con todos los megapíxeles del
+  sensor (50 MP o más en celulares nuevos): archivos de 15–30 MB que tardan en cruzar el Wi-Fi, saturan la app del
+  controlador al recibirlos y además superan el límite de Cloudinary Free (10 MB, 25 MP; maestro Q-15). Nuevo
+  `capture.maxMegapixels = 12`: al abrir la cámara se elige la mayor resolución ≤ 12 MP, preferiblemente 4:3
+  (`src/domain/pictureSize.ts`, `useCapturePictureSize`). La foto sigue sin recomprimirse (RN-24).
+- **El enlace se cortaba por una demora propia del controlador:** los HEARTBEAT y la marca «última señal» de cada
+  cámara pasaban por la cola de tareas del controlador; mientras guardaba fotos, las cámaras no recibían señal por
+  más de 6 s y cortaban. Ahora el HEARTBEAT sale directo del temporizador, cualquier mensaje y los datos de una foto
+  que llega cuentan como señal de vida al instante, y la cámara tolera el triple mientras está enviando una foto.
+- **Prueba corta:** límite 15 → 20 s (calibrar) y PANT-14 dice el **motivo** de la reprobación (p. ej. «Tardó 18,5 s
+  en total (máximo 20,0 s)»).
+- **Mediciones para Q-15:** `CAPTURE/PICTURE_SIZE` (resolución elegida y disponibles), `TRANSFER/OK` en la cámara con
+  bytes, MP y ms, `TRANSFER/RECEIVED` en el controlador con bytes y ms, y `SESSION/SHORT_TEST` con motivos y límites.
+- CONFIG_VERSION **CFG-5**. Versión 0.4.3 (Android versionCode 6, iOS build 6).
+
+## Archivos
+Nuevos: `src/domain/pictureSize.ts`, `src/ui/hooks/useCapturePictureSize.ts`, `__tests__/pictureSize.test.ts`,
+`__tests__/shortTest.test.ts`. Modificados: `src/config/defaults.ts`, `__tests__/config.test.ts`,
+`app/camera/live.tsx`, `app/camera/test.tsx`, `src/controller/controllerRuntime.ts`, `src/controller/shortTest.ts`,
+`app/controller/short-test.tsx`, `src/ui/strings.ts`, `src/local-network/{transport,factory}.ts`,
+`src/local-network/tcp/tcpFileReceiver.ts`, `src/camera/{transferQueue,cameraAgent}.ts`,
+`tools/verificacion/redlocal.ts`, `app.json`, `package.json`, `package-lock.json`, `README.md`.
+
+## Resultado
+`tsc --noEmit`: 0 errores. Pruebas: **120 OK** (nuevas: resolución de captura y motivos de la prueba corta).
+Red local en Node (`redlocal.ts`): 8/8, incluida la señal de vida durante la recepción.
+
+## Pendiente de medir en campo (Q-15)
+Tamaño real de las fotos de 12 MP con `jpegQuality = 1` frente a 10 MB: verlo en `TRANSFER/OK` del diagnóstico.
+
+---
+
 # Informe de avance — App móvil v0.4.2 (formato maestro §23.2)
 
 **Tarea:** corrección tras la primera prueba con tres Android. **Fecha:** 2026-10-07 · CFG-4 · esquema SQLite 4.

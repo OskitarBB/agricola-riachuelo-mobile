@@ -1,10 +1,10 @@
-// __tests__/config.test.ts — Coherencia de la configuración CFG-4 (maestro §17: un cambio que rompa una regla no se acepta).
+// __tests__/config.test.ts — Coherencia de la configuración CFG-5 (maestro §17: un cambio que rompa una regla no se acepta).
 
 import { checkConfigCoherence, CONFIG_VERSION, DEFAULT_CONFIG } from '../src/config/defaults';
 
 test('la configuración por defecto cumple todas las reglas de coherencia', () => {
   expect(checkConfigCoherence(DEFAULT_CONFIG)).toEqual([]);
-  expect(CONFIG_VERSION).toBe('CFG-4');
+  expect(CONFIG_VERSION).toBe('CFG-5');
 });
 
 test('detecta una espera de respuesta demasiado corta', () => {

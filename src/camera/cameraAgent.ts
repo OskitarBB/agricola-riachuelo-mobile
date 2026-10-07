@@ -219,8 +219,12 @@ class CameraAgent {
   /** Sin mensajes del controlador por lostAfterMs → se cierra y se reintenta (14.9). */
   private checkWatchdog(): void {
     if (!this.client.connected) return;
-    if (nowMs() - this.lastMessageMs > CONFIG.protocol.lostAfterMs) {
-      logEvent('WARN', 'NET', 'LINK_STATE', { to: 'PERDIDA' });
+    // Mientras una foto viaja al controlador, su app está ocupada recibiéndola: se tolera el triple antes de cortar
+    // (cortar ahí obliga a reconectar y a reenviar, y alarga todo).
+    const limit = this.queue.isSending() ? CONFIG.protocol.lostAfterMs * 3 : CONFIG.protocol.lostAfterMs;
+    const silence = nowMs() - this.lastMessageMs;
+    if (silence > limit) {
+      logEvent('WARN', 'NET', 'LINK_STATE', { to: 'PERDIDA', silenceMs: silence, sending: this.queue.isSending() });
       this.client.close();
       useCameraLive.setState({ link: 'DESCONECTADO', paired: false });
       this.scheduleReconnect();

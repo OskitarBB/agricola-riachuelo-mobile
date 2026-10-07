@@ -1,4 +1,4 @@
-// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-4).
+// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-5).
 //
 // QUÉ HACE: concentra TODOS los umbrales, tiempos, puertos e intervalos (regla R-08 del maestro:
 // ningún número "suelto" en el código). Los servicios leen estos valores a través de src/config/index.ts.
@@ -22,9 +22,15 @@
 //  - auth.clockSkewWarnSeconds: los vencimientos de los tokens se miden con la hora del servidor (serverTime de login,
 //    refresh y health); si el reloj del celular difiere más que esto, se registra NET/SERVER_CLOCK_OFFSET.
 //
+// CAMBIOS CFG-4 → CFG-5 (primera prueba con tres Android, 07/10/2026; maestro Q-15 y riesgo «fotos demasiado grandes»):
+//  - capture.maxMegapixels: NUEVO (12). Sin límite, Android toma la foto a la resolución máxima del sensor (50 MP o
+//    más): la prueba corta tardó 18,5 s en llegar al controlador y esas fotos superan Cloudinary Free (10 MB, 25 MP).
+//    Se elige la mayor resolución ≤ 12 MP, preferiblemente 4:3 (src/domain/pictureSize.ts). La foto NO se recomprime.
+//  - shortTest.timeoutMs: 15 000 → 20 000 ms (calibrar): margen para dos fotos de 12 MP por el mismo Wi-Fi.
+//
 // Los valores marcados "calibrar" son iniciales: se ajustan con mediciones y NO son resultados validados.
 
-export const CONFIG_VERSION = 'CFG-4';
+export const CONFIG_VERSION = 'CFG-5';
 
 export interface AppConfig {
   auth: {
@@ -69,6 +75,8 @@ export interface AppConfig {
     /** Opciones que la pantalla "Nueva sesión" ofrece para el intervalo automático. */
     intervalOptionsMs: number[];
     jpegQuality: number; // 0..1
+    /** Resolución máxima de la foto en megapíxeles (Q-15): se elige la mayor disponible ≤ este valor. */
+    maxMegapixels: number;
     shutterSound: boolean;
     captureBudgetMs: number; // tiempo previsto para tomar, mover y calcular el md5 de la foto
     /** Detector de estabilidad (acelerómetro + giroscopio). Solo bloquea la captura AUTOMÁTICA. */
@@ -214,6 +222,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     maxIntervalMs: 10_000,
     intervalOptionsMs: [1_000, 2_000, 3_000, 5_000],
     jpegQuality: 1,
+    maxMegapixels: 12, // calibrar (Q-15): ≤ 25 MP y ≤ 10 MB por foto (Cloudinary Free)
     shutterSound: false,
     captureBudgetMs: 2_000,
     stability: {
@@ -225,7 +234,7 @@ export const DEFAULT_CONFIG: AppConfig = {
       maxWaitMs: 1_200,
     },
   },
-  shortTest: { timeoutMs: 15_000 },
+  shortTest: { timeoutMs: 20_000 }, // calibrar
   quality: {
     profileVersion: 'Q0',
     timeoutMs: 4_000,
@@ -297,6 +306,7 @@ export function checkConfigCoherence(cfg: AppConfig): string[] {
   const autoBudget = cfg.capture.stability.maxWaitMs + cfg.capture.captureBudgetMs + cfg.quality.timeoutMs + 500;
   if (p.captureResponseTimeoutMs < autoBudget) errors.push('captureResponseTimeoutMs < estabilidad + captura + calidad + 500');
   if (p.commandValidityMs >= p.captureResponseTimeoutMs) errors.push('commandValidityMs ≥ captureResponseTimeoutMs');
+  if (!(cfg.capture.maxMegapixels >= 2 && cfg.capture.maxMegapixels <= 25)) errors.push('capture.maxMegapixels fuera de 2–25 MP (Cloudinary Free: 25 MP)');
   if (cfg.shortTest.timeoutMs <= p.captureResponseTimeoutMs) errors.push('shortTest.timeoutMs ≤ captureResponseTimeoutMs');
   if (p.ackTimeoutMs >= p.lostAfterMs) errors.push('ackTimeoutMs ≥ lostAfterMs');
   const d = cfg.device;

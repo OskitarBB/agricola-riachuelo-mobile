@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { takeTestPhoto, type TestShot } from '../../src/camera/testModeService';
 import { CONFIG } from '../../src/config';
 import { isCameraReady, registerCamera, setCameraReady } from '../../src/device/cameraService';
+import { useCapturePictureSize } from '../../src/ui/hooks/useCapturePictureSize';
 import { useFieldKeepAwake } from '../../src/device/keepAwake';
 import { stabilityDetector, type StabilityState } from '../../src/device/stabilityDetector';
 import { AppButton } from '../../src/ui/components/AppButton';
@@ -56,9 +57,13 @@ export default function CameraTestScreen() {
   }, []);
 
   // Ref ESTABLE: con una función en línea React la llama con null y otra vez en cada redibujo (ver cameraService).
+  const camRef = useRef<CameraView | null>(null);
   const setCameraRef = useCallback((r: CameraView | null) => {
+    camRef.current = r;
     if (r) registerCamera(r);
   }, []);
+  // Misma resolución que en la sesión (capture.maxMegapixels), así la prueba mide fotos iguales a las reales.
+  const { pictureSize, onCameraReady } = useCapturePictureSize(camRef);
 
   const take = useCallback(
     async (auto: boolean) => {
@@ -121,7 +126,8 @@ export default function CameraTestScreen() {
             style={StyleSheet.absoluteFill}
             facing="back"
             animateShutter={false}
-            onCameraReady={() => setCameraReady(true)}
+            pictureSize={pictureSize}
+            onCameraReady={onCameraReady}
             onMountError={() => setCameraReady(false)}
           />
         ) : (

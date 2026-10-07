@@ -11,6 +11,7 @@
 import { isRunningInExpoGo } from 'expo';
 
 import { CONFIG } from '../config';
+import { logEvent } from '../diagnostics/eventLog';
 import { localIp } from '../device/networkMonitor';
 import { UploadFileSender } from './client/uploadFileSender';
 import { WsControlClient } from './client/wsControlClient';
@@ -58,7 +59,7 @@ const realFactory: LocalNetworkFactory = {
   createFileReceiver: (): FileReceiver => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { TcpFileReceiver } = require('./tcp/tcpFileReceiver') as typeof import('./tcp/tcpFileReceiver');
-    return new TcpFileReceiver(loadTcp());
+    return new TcpFileReceiver(loadTcp(), (data, sessionId) => logEvent('INFO', 'TRANSFER', 'RECEIVED', data, sessionId));
   },
   createControlClient: () => new WsControlClient(),
   createFileSender: () => new UploadFileSender(),

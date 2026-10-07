@@ -51,6 +51,11 @@ export interface FileReceiver {
   onCapture(
     handler: (meta: LocalCaptureMeta, tempFileUri: string, remoteAddress: string | null) => Promise<LocalCaptureResponse>,
   ): Unsubscribe;
+  /**
+   * Opcional: avisa (como máximo una vez por segundo) que está llegando una foto de ese celular. El controlador lo usa
+   * como señal de vida de la cámara mientras dura una transferencia larga.
+   */
+  onActivity?(handler: (deviceId: string) => void): Unsubscribe;
 }
 
 /** Cámara: envío de una foto al controlador. */

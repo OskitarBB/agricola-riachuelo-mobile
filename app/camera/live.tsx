@@ -20,6 +20,7 @@ import { useCameraLive } from '../../src/camera/cameraStore';
 import { formatTime } from '../../src/domain/time';
 import type { CameraRole } from '../../src/domain/types';
 import { registerCamera, setCameraReady } from '../../src/device/cameraService';
+import { useCapturePictureSize } from '../../src/ui/hooks/useCapturePictureSize';
 import { useFieldKeepAwake } from '../../src/device/keepAwake';
 import { stabilityDetector, type StabilityState } from '../../src/device/stabilityDetector';
 import { AppButton } from '../../src/ui/components/AppButton';
@@ -50,6 +51,8 @@ export default function LiveCameraScreen() {
     camRef.current = r;
     if (r) registerCamera(r);
   }, []);
+  // Resolución ≤ capture.maxMegapixels (Q-15): sin esto Android usa la máxima del sensor (50 MP o más).
+  const { pictureSize, onCameraReady } = useCapturePictureSize(camRef);
 
   // Destello + sonido de obturador en cada captura ordenada por el controlador.
   const flashCount = live.flash;
@@ -109,7 +112,8 @@ export default function LiveCameraScreen() {
           facing="back"
           active
           animateShutter={false}
-          onCameraReady={() => setCameraReady(true)}
+          pictureSize={pictureSize}
+          onCameraReady={onCameraReady}
           onMountError={() => setCameraReady(false)}
         />
       ) : (
