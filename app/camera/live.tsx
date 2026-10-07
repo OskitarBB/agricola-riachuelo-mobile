@@ -10,7 +10,7 @@
 
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View, useAnimatedValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -45,6 +45,11 @@ export default function LiveCameraScreen() {
 
   useEffect(() => stabilityDetector.subscribe(setStab), []);
   useEffect(() => () => registerCamera(null), []);
+  // Ref ESTABLE: con una función en línea React la llama con null y otra vez en cada redibujo (ver cameraService).
+  const setCameraRef = useCallback((r: CameraView | null) => {
+    camRef.current = r;
+    if (r) registerCamera(r);
+  }, []);
 
   // Destello + sonido de obturador en cada captura ordenada por el controlador.
   const flashCount = live.flash;
@@ -99,10 +104,7 @@ export default function LiveCameraScreen() {
     <View style={styles.flex}>
       {permission?.granted ? (
         <CameraView
-          ref={(r) => {
-            camRef.current = r;
-            registerCamera(r);
-          }}
+          ref={setCameraRef}
           style={StyleSheet.absoluteFill}
           facing="back"
           active

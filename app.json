@@ -3,7 +3,7 @@
     "name": "Riachuelo Monitoreo",
     "slug": "riachuelo-mobile",
     "scheme": "riachuelo",
-    "version": "0.4.1",
+    "version": "0.4.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,7 +13,7 @@
     },
     "ios": {
       "bundleIdentifier": "pe.riachuelo.monitoreo",
-      "buildNumber": "4",
+      "buildNumber": "5",
       "supportsTablet": false,
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Se usa para coordinar las cámaras y el controlador en el Wi-Fi del campo.",
@@ -24,7 +24,7 @@
     },
     "android": {
       "package": "pe.riachuelo.monitoreo",
-      "versionCode": 4,
+      "versionCode": 5,
       "adaptiveIcon": {
         "backgroundColor": "#0E3B24",
         "foregroundImage": "./assets/android-icon-foreground.png",

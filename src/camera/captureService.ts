@@ -75,6 +75,7 @@ export async function executeCapture(
     const save = async (resp: Envelope) => saveProcessed(env.messageId, env.type, JSON.stringify(resp));
 
     if (!isCameraReady()) {
+      logEvent('ERROR', 'CAPTURE', 'CAMERA_NOT_READY', { purpose: cmd.purpose }, ctx.sessionId);
       const resp = reply('QUALITY_ERROR', {
         sequenceId: cmd.sequenceId,
         captureId: cmd.captureId,
@@ -115,7 +116,8 @@ export async function executeCapture(
     let photo;
     try {
       photo = await takeToFile(dest, { jpegQuality: ctx.config.jpegQuality, shutterSound: ctx.config.shutterSound });
-    } catch {
+    } catch (err) {
+      logEvent('ERROR', 'CAPTURE', 'TAKE_PICTURE_FAILED', { message: err instanceof Error ? err.message : String(err) }, ctx.sessionId);
       const resp = reply('QUALITY_ERROR', {
         sequenceId: cmd.sequenceId,
         captureId: cmd.captureId,

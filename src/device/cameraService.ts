@@ -12,21 +12,33 @@ import { nowIso } from '../domain/time';
 import { fileFacts, moveFile } from '../storage/files';
 
 let cameraRef: CameraView | null = null;
-let cameraReady = false;
+/**
+ * Instancia de <CameraView> que avisó onCameraReady. Se guarda la INSTANCIA (no un booleano) porque React vuelve a
+ * llamar al ref con null y luego con el mismo componente cada vez que la pantalla se redibuja (ref en línea): con un
+ * booleano, el primer redibujo dejaba la cámara «no lista» para siempre y cada orden respondía ERROR_CAMARA al
+ * instante (prueba corta reprobada en 0,0 s). onCameraReady solo se dispara una vez por montaje.
+ */
+let readyInstance: CameraView | null = null;
 const readyListeners = new Set<(ready: boolean) => void>();
 
+function notify(): void {
+  const ready = isCameraReady();
+  readyListeners.forEach((l) => l(ready));
+}
+
 export function registerCamera(ref: CameraView | null): void {
+  if (ref === cameraRef) return;
   cameraRef = ref;
-  if (!ref) setCameraReady(false);
+  notify();
 }
 
 export function setCameraReady(ready: boolean): void {
-  cameraReady = ready && cameraRef !== null;
-  readyListeners.forEach((l) => l(cameraReady));
+  readyInstance = ready ? cameraRef : null;
+  notify();
 }
 
 export function isCameraReady(): boolean {
-  return cameraReady && cameraRef !== null;
+  return cameraRef !== null && readyInstance === cameraRef;
 }
 
 export function onCameraReady(l: (ready: boolean) => void): () => void {
@@ -46,7 +58,7 @@ export interface TakenPhoto {
 
 /** Toma una foto y la guarda en `destination` (la foto original nunca se recomprime). */
 export async function takeToFile(destination: File, opts: { jpegQuality: number; shutterSound: boolean }): Promise<TakenPhoto> {
-  if (!cameraRef || !cameraReady) throw new Error('Cámara no disponible');
+  if (!cameraRef || !isCameraReady()) throw new Error('Cámara no disponible');
   const started = Date.now();
   const capturedAt = nowIso();
   const pic = await cameraRef.takePictureAsync({ quality: opts.jpegQuality, exif: false, shutterSound: opts.shutterSound });

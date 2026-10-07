@@ -1,3 +1,33 @@
+# Informe de avance — App móvil v0.4.2 (formato maestro §23.2)
+
+**Tarea:** corrección tras la primera prueba con tres Android. **Fecha:** 2026-10-07 · CFG-4 · esquema SQLite 4.
+
+## Hecho
+- **Prueba corta reprobada en 0,0 s con QUALITY_ERROR / ERROR_CAMARA en ambas cámaras:** no era la calidad de la
+  foto. PANT-31 (y PANT-32) pasaban el ref de `<CameraView>` como función en línea; React la vuelve a llamar con
+  `null` y con el mismo componente en cada redibujo (la pantalla se redibuja varias veces por segundo por el sensor de
+  estabilidad) y `registerCamera(null)` dejaba la cámara «no lista» para siempre, porque `onCameraReady` solo se
+  dispara una vez. Cada orden respondía `FALLO_CAMARA` sin tomar la foto. Ahora `cameraService` recuerda la
+  **instancia** que avisó que está lista y las pantallas usan un ref estable (`useCallback`).
+- Diagnóstico: `CAPTURE/CAMERA_NOT_READY` y `CAPTURE/TAKE_PICTURE_FAILED` (con el mensaje) en el registro de eventos;
+  antes el error de la cámara no quedaba registrado.
+- Versión 0.4.2 (Android versionCode 5, iOS build 5).
+
+## Archivos modificados
+`src/device/cameraService.ts`, `app/camera/live.tsx`, `app/camera/test.tsx`, `src/camera/captureService.ts`,
+`app.json`, `package.json`, `package-lock.json` (solo la versión), `README.md`.
+
+## Resultado
+`tsc --noEmit`: 0 errores. Pruebas: 111 OK. Lógica de cámara lista comprobada (montaje, redibujo, nuevo montaje,
+desmontaje, error de montaje).
+
+## Nota
+Una foto que la calidad rechaza (REPETIR_NITIDEZ / REPETIR_EXPOSICION) **no** reprueba la prueba corta: si la foto
+llega al controlador queda «Aprobada con aviso de calidad». Solo la reprueban la falta de respuesta, el error de cámara
+o la falta de la foto.
+
+---
+
 # Informe de avance — App móvil v0.4.1 (formato maestro §23.2)
 
 **Tarea:** corrección de T-20 tras la primera prueba con el APK `piloto`. **Fecha:** 2026-10-07 · CFG-4 · esquema SQLite 4.

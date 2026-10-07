@@ -55,6 +55,11 @@ export default function CameraTestScreen() {
     };
   }, []);
 
+  // Ref ESTABLE: con una función en línea React la llama con null y otra vez en cada redibujo (ver cameraService).
+  const setCameraRef = useCallback((r: CameraView | null) => {
+    if (r) registerCamera(r);
+  }, []);
+
   const take = useCallback(
     async (auto: boolean) => {
       if (busyRef.current || !isCameraReady()) return;
@@ -112,7 +117,7 @@ export default function CameraTestScreen() {
       <View style={styles.flex}>
         {permission?.granted ? (
           <CameraView
-            ref={(r) => registerCamera(r)}
+            ref={setCameraRef}
             style={StyleSheet.absoluteFill}
             facing="back"
             animateShutter={false}

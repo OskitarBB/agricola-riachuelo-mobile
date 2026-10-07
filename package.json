@@ -1,6 +1,6 @@
 {
   "name": "riachuelo-mobile",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "main": "expo-router/entry",
   "dependencies": {
     "@noble/hashes": "1.8.0",
