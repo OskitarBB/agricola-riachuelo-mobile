@@ -17,6 +17,8 @@ export type AppErrorCode =
   | 'GPS_NO_DISPONIBLE'
   | 'GPS_IMPRECISO'
   | 'CATALOGOS_FALTANTES'
+  | 'CATALOGOS_VACIOS'
+  | 'HILERA_SIN_MARCADORES'
   | 'CATALOGOS_ANTIGUOS'
   | 'BATERIA_BAJA'
   | 'BATERIA_CRITICA'
@@ -150,6 +152,9 @@ export const APP_ERROR_MESSAGES: Record<AppErrorCode, string> = {
   GPS_NO_DISPONIBLE: 'Sin señal GPS: las secuencias se guardarán sin coordenadas.',
   GPS_IMPRECISO: 'Precisión GPS baja: se usará lote, hilera y marcador para ubicar.',
   CATALOGOS_FALTANTES: 'Descarga los catálogos con internet antes de crear una sesión.',
+  CATALOGOS_VACIOS:
+    'El servidor todavía no tiene lotes con hileras activas. Pide que los carguen en la web (Gestión) y vuelve a tocar «Actualizar».',
+  HILERA_SIN_MARCADORES: 'Esta hilera no tiene marcadores. Agrégalos en la web (Gestión → Marcadores) y actualiza los catálogos.',
   CATALOGOS_ANTIGUOS: 'Los catálogos tienen varios días. Actualízalos si tienes internet.',
   BATERIA_BAJA: 'Batería baja: conecta el power bank.',
   BATERIA_CRITICA: 'Batería crítica: la pasada se pausó.',

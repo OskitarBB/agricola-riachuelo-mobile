@@ -41,6 +41,8 @@ export default function NewPassScreen() {
   const [lateral, setLateral] = useState<LateralCode>(params.lateral === 'LATERAL_B' ? 'LATERAL_B' : 'LATERAL_A');
   const [segmentId, setSegmentId] = useState<string | null>(null);
   const [markerId, setMarkerId] = useState<string | null>(null);
+  /** Hilera cuyos marcadores ya se leyeron (para avisar si no tiene ninguno sin parpadear). */
+  const [markersFor, setMarkersFor] = useState<string | null>(null);
   const [isRepeat, setIsRepeat] = useState(false);
   const [ruleCode, setRuleCode] = useState<string | null>(null);
   const [reason, setReason] = useState('');
@@ -65,6 +67,7 @@ export default function NewPassScreen() {
       void catalogs.markers(rowId).then((m) => {
         if (!alive) return;
         setMarkers(m);
+        setMarkersFor(rowId);
         // Por defecto, el primer marcador de INICIO.
         const def = m.find((x) => x.position === 'INICIO');
         setMarkerId(def?.id ?? m[0]?.id ?? null);
@@ -189,6 +192,9 @@ export default function NewPassScreen() {
             <TextField label={S.newPass.repeatReason} value={reason} onChangeText={setReason} multiline />
           </Card>
         </FadeIn>
+      ) : null}
+      {rowId && markersFor === rowId && markers.length === 0 ? (
+        <Text style={styles.warn}>{messageFor('HILERA_SIN_MARCADORES')}</Text>
       ) : null}
       {ruleCode ? <Text style={styles.warn}>{messageFor(ruleCode)}</Text> : null}
     </Screen>

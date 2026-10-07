@@ -24,11 +24,18 @@ export function setFactoryDeviceId(provider: () => string): void {
   selfDeviceId = provider;
 }
 
-function loadTcp() {
+type TcpModule = typeof import('react-native-tcp-socket').default;
+
+function loadTcp(): TcpModule {
   // require diferido: solo se ejecuta fuera de Expo Go (Development Build / APK).
+  // OJO: react-native-tcp-socket 6.x termina su index.js con `module.exports = {…}`, que REEMPLAZA el
+  // `exports.default` del `export default`: con require() el módulo es el objeto mismo y `.default` no existe
+  // (con `.default` el servidor fallaba al crear el QR: «Ocurrió un error inesperado» en PANT-13).
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require('react-native-tcp-socket') as { default: typeof import('react-native-tcp-socket').default };
-  return mod.default;
+  const mod = require('react-native-tcp-socket') as TcpModule & { default?: TcpModule };
+  const tcp = mod.default ?? mod;
+  if (!tcp || typeof tcp.createServer !== 'function') throw new Error('react-native-tcp-socket no está disponible en este APK');
+  return tcp;
 }
 
 const simulatorFactory: LocalNetworkFactory = {

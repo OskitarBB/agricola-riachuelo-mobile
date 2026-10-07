@@ -9,7 +9,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { catalogInfo, isCatalogOld, type CatalogInfo } from '../../src/controller/catalogService';
+import { catalogInfo, catalogState, isCatalogOld, type CatalogInfo } from '../../src/controller/catalogService';
 import { controllerRuntime } from '../../src/controller/controllerRuntime';
 import { useController } from '../../src/controller/controllerStore';
 import { formatDateTime } from '../../src/domain/time';
@@ -46,7 +46,8 @@ export default function ControllerPanel() {
     if (!syncRunning) void pendingSyncCount().then(setPendingSync);
   }, [syncRunning, syncTick]);
 
-  const hasCatalogs = !!info && info.lots > 0;
+  const catState = catalogState(info);
+  const hasCatalogs = catState === 'LISTO';
   const old = info ? isCatalogOld(info) : false;
 
   const continueSession = () => {
@@ -77,7 +78,13 @@ export default function ControllerPanel() {
           label={S.controller.catalogs}
           right={
             <StatusPill
-              label={hasCatalogs ? formatDateTime(info?.bootstrapAt ?? null) : S.catalogs.never}
+              label={
+                hasCatalogs
+                  ? formatDateTime(info?.bootstrapAt ?? null)
+                  : catState === 'VACIO'
+                    ? S.catalogs.empty
+                    : S.catalogs.never
+              }
               tone={!hasCatalogs ? 'error' : old ? 'warn' : 'ok'}
             />
           }
@@ -90,7 +97,9 @@ export default function ControllerPanel() {
             <StatusPill label={gps ? S.pass.accuracy(gps.fix.accuracyM ?? 0) : S.pass.noGps} tone={gps ? 'ok' : 'neutral'} />
           }
         />
-        {!hasCatalogs ? <Text style={styles.alert}>{messageFor('CATALOGOS_FALTANTES')}</Text> : null}
+        {!hasCatalogs ? (
+          <Text style={styles.alert}>{messageFor(catState === 'VACIO' ? 'CATALOGOS_VACIOS' : 'CATALOGOS_FALTANTES')}</Text>
+        ) : null}
         {old ? <Text style={styles.alert}>{messageFor('CATALOGOS_ANTIGUOS')}</Text> : null}
         {alerts
           .filter((a) => a !== 'GPS_NO_DISPONIBLE')

@@ -1,4 +1,4 @@
-# Riachuelo Monitoreo — App móvil (Fases 0 a 4 · v0.4.0)
+# Riachuelo Monitoreo — App móvil (Fases 0 a 4 · v0.4.1)
 
 App móvil del sistema de monitoreo fitosanitario de vid de **Agrícola Riachuelo** (Curso Integrador II).
 Un celular **controlador** dirige a dos celulares **cámara** que toman fotos sincronizadas de los dos laterales
@@ -161,7 +161,7 @@ Cada archivo empieza con un comentario **QUÉ HACE** y, cuando aplica, qué part
 npm run build:apk:piloto     # perfil "piloto": https://monitoreo.agricolariachuelo.org, sin backend simulado
 ```
 
-- Los **tres** celulares deben tener la **misma versión** (0.4.0): en `piloto` la vinculación lo exige (RN-17).
+- Los **tres** celulares deben tener la **misma versión** (hoy 0.4.1): en `piloto` la vinculación lo exige (RN-17).
 - Las cuentas de los operadores se crean desde la app (*Crear cuenta*) y el administrador las aprueba en la web con
   el rol «Operador de campo». El administrador también puede usar la app.
 - Primer uso del controlador: *Catálogos › Actualizar* (con internet) para bajar lotes, hileras y marcadores reales.

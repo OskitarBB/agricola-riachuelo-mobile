@@ -65,6 +65,17 @@ export async function updateCatalogs(): Promise<{ ok: true; info: CatalogInfo } 
   }
 }
 
+/**
+ * Estado de los catálogos para PANT-08 y PANT-11: nunca descargados, descargados pero el servidor no tiene lotes con
+ * hileras activas (la descarga fue correcta, el catálogo está vacío en la web) o listos para crear una sesión.
+ */
+export type CatalogState = 'SIN_DESCARGAR' | 'VACIO' | 'LISTO';
+
+export function catalogState(info: CatalogInfo | null): CatalogState {
+  if (info && info.lots > 0 && info.rows > 0) return 'LISTO';
+  return info?.bootstrapAt ? 'VACIO' : 'SIN_DESCARGAR';
+}
+
 export function catalogInfo(): Promise<CatalogInfo> {
   return getCatalogInfo();
 }

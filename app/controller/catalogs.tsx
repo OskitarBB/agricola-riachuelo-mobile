@@ -9,7 +9,7 @@ import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useAppSession } from '../../src/auth/authStore';
-import { catalogInfo, isCatalogOld, updateCatalogs, type CatalogInfo } from '../../src/controller/catalogService';
+import { catalogInfo, catalogState, isCatalogOld, updateCatalogs, type CatalogInfo } from '../../src/controller/catalogService';
 import { formatDateTime } from '../../src/domain/time';
 import { AnimatedCounter } from '../../src/ui/components/AnimatedCounter';
 import { AppButton } from '../../src/ui/components/AppButton';
@@ -40,13 +40,16 @@ export default function CatalogsScreen() {
     setBusy(false);
     if (r.ok) {
       setInfo(r.info);
-      showToast('CATALOGOS_ACTUALIZADOS', 'success');
+      // Descarga correcta pero sin lotes con hileras: el catálogo está vacío en la web (no es un error de la app).
+      if (catalogState(r.info) === 'LISTO') showToast('CATALOGOS_ACTUALIZADOS', 'success');
+      else showToast('CATALOGOS_VACIOS', 'warn');
     } else {
       showToast(r.code, 'error');
     }
   };
 
-  const has = !!info && info.lots > 0;
+  const state = catalogState(info);
+  const has = state === 'LISTO';
   return (
     <Screen
       header={<AppHeader title={S.catalogs.title} back />}
@@ -58,8 +61,8 @@ export default function CatalogsScreen() {
           label={S.catalogs.updatedAt}
           right={
             <StatusPill
-              label={has ? formatDateTime(info?.bootstrapAt ?? null) : S.catalogs.never}
-              tone={!has ? 'error' : info && isCatalogOld(info) ? 'warn' : 'ok'}
+              label={info?.bootstrapAt ? formatDateTime(info.bootstrapAt) : S.catalogs.never}
+              tone={state === 'SIN_DESCARGAR' ? 'error' : !has || (info && isCatalogOld(info)) ? 'warn' : 'ok'}
             />
           }
         />
@@ -74,6 +77,7 @@ export default function CatalogsScreen() {
           <AnimatedCounter value={info?.markers ?? 0} label={S.catalogs.markers} color={colors.gold} />
         </View>
       </Card>
+      {state === 'VACIO' ? <Text style={styles.warn}>{messageFor('CATALOGOS_VACIOS')}</Text> : null}
       {!online ? <Text style={styles.warn}>{messageFor('SIN_INTERNET')}</Text> : null}
       {info && isCatalogOld(info) ? <Text style={styles.warn}>{messageFor('CATALOGOS_ANTIGUOS')}</Text> : null}
     </Screen>

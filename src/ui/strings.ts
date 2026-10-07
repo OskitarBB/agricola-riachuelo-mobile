@@ -199,6 +199,7 @@ export const S = {
     update: 'Actualizar',
     updated: 'Catálogos actualizados.',
     never: 'Sin descargar',
+    empty: 'Sin lotes en el servidor',
   },
   newSession: {
     title: 'Nueva sesión',

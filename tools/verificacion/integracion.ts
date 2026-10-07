@@ -32,7 +32,8 @@ process.env.RIACHUELO_SQLITE = path.join(WORK, 'app.sqlite');
 process.env.RIACHUELO_ARCHIVOS = path.join(WORK, 'archivos');
 (globalThis as Record<string, unknown>).__DEV__ = false;
 
-const M = path.resolve(process.cwd(), 'src');
+// Módulos de la app, relativos a este archivo (una ruta absoluta de Windows no sirve en import()).
+const M = '../../src';
 /** Base SQLite de la plataforma en la laptop (opcional): permite comprobar lo que realmente quedó guardado. */
 const SERVER_DB = process.env.PLATAFORMA_DB ?? '';
 const serverDb = SERVER_DB ? new DatabaseSync(SERVER_DB, { timeout: 5000 }) : null;

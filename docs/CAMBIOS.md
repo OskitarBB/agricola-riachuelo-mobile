@@ -1,3 +1,42 @@
+# Informe de avance — App móvil v0.4.1 (formato maestro §23.2)
+
+**Tarea:** corrección de T-20 tras la primera prueba con el APK `piloto`. **Fecha:** 2026-10-07 · CFG-4 · esquema SQLite 4.
+
+## Hecho
+- **QR de vinculación (PANT-13) — «Ocurrió un error inesperado» y «Preparando…» sin fin en el APK:**
+  `factory.ts` cargaba `react-native-tcp-socket` con `require(...).default`, pero el `index.js` de la librería (6.4.3)
+  termina con `module.exports = {…}`, que reemplaza a `exports.default`: el servidor TCP del controlador nunca
+  arrancaba (en Expo Go se usa el simulador, por eso no se había visto). Ahora usa `mod.default ?? mod` y, si el
+  módulo no está, lo dice en el diagnóstico. Nueva prueba `tools/verificacion/redlocal.ts`: el servidor de control,
+  el códec WebSocket, el receptor HTTP de fotos y los clientes de la cámara corren sobre TCP real (módulo `net` de
+  Node) — 8/8.
+- **Catálogos vacíos en el servidor:** el piloto todavía no tenía lotes. La descarga era correcta pero la app seguía
+  mostrando «Sin descargar» y «Descarga los catálogos…», lo que parecía un error de la app. Ahora distingue tres
+  estados (`catalogState`): sin descargar, **servidor sin lotes** («Sin lotes en el servidor» y el aviso
+  `CATALOGOS_VACIOS`, que dice que hay que cargarlos en la web) y listo. Crear una sesión responde el mismo código.
+- **Hilera sin marcadores:** PANT-15 avisa `HILERA_SIN_MARCADORES` en lugar de dejar «Iniciar pasada» desactivado sin
+  explicación (la pasada exige un marcador de inicio).
+- Versión 0.4.1 (Android versionCode 4, iOS build 4). Sin cambios de base de datos ni del contrato `/api/v1`.
+
+## Archivos modificados
+`src/local-network/factory.ts`, `tools/verificacion/redlocal.ts` (nuevo), `tools/verificacion/mocks/expo-file-system.ts`,
+`src/controller/catalogService.ts`, `src/controller/sessionService.ts`, `src/ui/messages.ts`, `src/ui/strings.ts`,
+`app/controller/index.tsx`, `app/controller/catalogs.tsx`, `app/controller/new-pass.tsx`, `app.json`, `package.json`,
+`package-lock.json` (solo la versión), `README.md`.
+
+## Cómo probar
+Con un servidor sin lotes: *Catálogos › Actualizar* → aviso «El servidor todavía no tiene lotes…» y el panel muestra
+«Sin lotes en el servidor». Con lotes e hileras pero sin marcadores en la hilera elegida: PANT-15 muestra el aviso.
+
+## Resultado de typecheck / test
+`tsc --noEmit`: 0 errores. Pruebas: 111 OK. Integración con Django local: sin cambios (29/29).
+
+## Siguiente
+Cargar en el piloto los lotes e hileras reales (Anexo D) y, en Gestión, los segmentos y marcadores de las hileras de
+la prueba; compilar 0.4.1 junto con lo que salga de la prueba con los tres celulares.
+
+---
+
 # Informe de avance — App móvil v0.4.0 · Fase 4 (formato maestro §23.2)
 
 **Tarea:** T-20 — Cola de sincronización con la plataforma Django y subida directa a Cloudinary.
@@ -64,7 +103,8 @@
 - Pruebas E.7 y E.8 en Jest: **cumplido**.
 - CP-26, CP-27, CP-28, CP-29, CP-33, CP-35, CP-39, CP-40, CP-42, CP-43, CP-44: **cumplidos** contra Django
   (local) o el simulado (ver evidencia).
-- CP-38 y CP-41 con Cloudinary real: **pendientes** (se prueban en el piloto con una cuenta de operador aprobada).
+- CP-38 y CP-41: **cumplidos** contra Django local con su Cloudinary simulado (`tools/verificacion/piloto.ts`, 8/8);
+  con Cloudinary real: **pendientes** de correr `piloto.ts` desde la PC del equipo con la cuenta de operador.
 
 ## Supuestos tomados
 - **S-07** `sync.uploadMode` = TICKET por defecto; MULTIPART solo como respaldo.

@@ -37,7 +37,9 @@ export async function createDraft(
   i: CreateDraftInput,
 ): Promise<{ ok: true; session: MonitoringSession } | { ok: false; code: string }> {
   const catalogs = await getCatalogInfo();
-  if (catalogs.lots === 0 || catalogs.rows === 0) return { ok: false, code: 'CATALOGOS_FALTANTES' };
+  if (catalogs.lots === 0 || catalogs.rows === 0) {
+    return { ok: false, code: catalogs.bootstrapAt ? 'CATALOGOS_VACIOS' : 'CATALOGOS_FALTANTES' };
+  }
   const modeRule: RuleResult = validateSessionMode(i.mode, i.intervalMs, CONFIG.capture);
   if (!modeRule.ok) return { ok: false, code: modeRule.code };
   if (i.batteryPct !== null && i.batteryPct < CONFIG.device.minBatteryToStartPct) return { ok: false, code: 'BATERIA_BAJA' };

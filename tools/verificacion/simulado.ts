@@ -18,7 +18,8 @@ fs.mkdirSync(WORK, { recursive: true });
 process.env.RIACHUELO_SQLITE = path.join(WORK, 'app.sqlite');
 process.env.RIACHUELO_ARCHIVOS = path.join(WORK, 'archivos');
 (globalThis as Record<string, unknown>).__DEV__ = false;
-const M = path.resolve(process.cwd(), 'src');
+// Módulos de la app, relativos a este archivo (una ruta absoluta de Windows no sirve en import()).
+const M = '../../src';
 
 let passed = 0;
 const failures: string[] = [];

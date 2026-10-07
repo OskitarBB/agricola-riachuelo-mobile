@@ -29,6 +29,13 @@ export class File {
   textSync() { return fs.readFileSync(toPath(this.uri), 'utf8'); }
   bytesSync() { return new Uint8Array(fs.readFileSync(toPath(this.uri))); }
   delete() { fs.rmSync(toPath(this.uri)); }
+  open(_mode?: FileMode) {
+    const p = toPath(this.uri);
+    return {
+      writeBytes: (chunk: Uint8Array) => fs.appendFileSync(p, chunk),
+      close: () => undefined,
+    };
+  }
   moveSync(dest: File) { fs.mkdirSync(nodePath.dirname(toPath(dest.uri)), { recursive: true }); fs.renameSync(toPath(this.uri), toPath(dest.uri)); this.uri = dest.uri; }
   copySync(dest: File) { fs.mkdirSync(nodePath.dirname(toPath(dest.uri)), { recursive: true }); fs.copyFileSync(toPath(this.uri), toPath(dest.uri)); }
   async upload(url: string, opts: {
@@ -36,11 +43,17 @@ export class File {
     headers?: Record<string, string>; onProgress?: (p: { bytesSent: number; totalBytes: number }) => void; signal?: AbortSignal;
   } = {}) {
     const bytes = fs.readFileSync(toPath(this.uri)); // lanza si el archivo no existe (como el nativo)
-    const form = new FormData();
-    for (const [k, v] of Object.entries(opts.parameters ?? {})) form.append(k, v);
-    form.append(opts.fieldName ?? 'file', new Blob([bytes], { type: opts.mimeType ?? 'application/octet-stream' }), this.name);
+    let payload: FormData | Uint8Array;
+    if (opts.uploadType === UploadType.BINARY_CONTENT) {
+      payload = new Uint8Array(bytes); // cuerpo binario (envío cámara → controlador, §14.8)
+    } else {
+      const form = new FormData();
+      for (const [k, v] of Object.entries(opts.parameters ?? {})) form.append(k, v);
+      form.append(opts.fieldName ?? 'file', new Blob([bytes], { type: opts.mimeType ?? 'application/octet-stream' }), this.name);
+      payload = form;
+    }
     opts.onProgress?.({ bytesSent: 0, totalBytes: bytes.length });
-    const res = await fetch(url, { method: opts.httpMethod ?? 'POST', headers: opts.headers, body: form, signal: opts.signal });
+    const res = await fetch(url, { method: opts.httpMethod ?? 'POST', headers: opts.headers, body: payload, signal: opts.signal });
     const body = await res.text();
     opts.onProgress?.({ bytesSent: bytes.length, totalBytes: bytes.length });
     const headers: Record<string, string> = {};

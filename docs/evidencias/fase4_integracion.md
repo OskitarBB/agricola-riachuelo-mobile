@@ -29,7 +29,9 @@ rama `prueba2`, commit `908de8e` (2026-10-05) corriendo en local con `APP_ENV=de
 | CP-42 `UPLOAD_SIGNATURE_INVALID` | ✅ DESCARTADA, nueva subida (`existing: true`) y confirmación; agotadas → `REINTENTOS_DE_SUBIDA_AGOTADOS` | integración + E.8 |
 | CP-43 Foto más grande que el límite | ✅ `FOTO_DEMASIADO_GRANDE`, la foto local no se toca | simulado + E.8 |
 | CP-44 Cloudinary no responde / corte de red | ✅ REINTENTAR con espera; la cola queda igual; al volver, una sola vez | simulado + integración |
-| CP-38 y CP-41 con **Cloudinary real** | ⏳ Pendiente en el piloto (el maestro los deja para el backend real) | — |
+| CP-38 Subida directa con el ticket | ✅ `authenticated`, `overwrite=false`, ningún archivo a Django, sin cabeceras de la API hacia la nube | `piloto.ts` contra Django local (Cloudinary simulado del servidor) |
+| CP-41 Foto que ya estaba en la nube | ✅ `existing: true`, mismo `public_id`, Django confirma | `piloto.ts` contra Django local |
+| CP-38 y CP-41 con **Cloudinary real** | ⏳ `tools/verificacion/piloto.ts` listo; se corre desde la PC del equipo (el entorno de desarrollo no llega al piloto) | — |
 
 ## Resultados
 
