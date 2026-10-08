@@ -45,17 +45,15 @@ export interface StartPassInput {
   lateral: LateralCode | null;
   markerId: string | null;
   devices: DeviceHealth[]; // controlador + cámaras
-  minBatteryPct: number;
   minFreeSpaceBytes: number;
 }
 
-/** RN-10 (inicio de pasada). */
+/** RN-10 (inicio de pasada). Desde CFG-7 la batería no bloquea: solo avisa (controllerRuntime.checkDeviceHealth). */
 export function canStartPass(i: StartPassInput): RuleResult {
   if (i.links.CAMERA_1 !== 'CONECTADA' || i.links.CAMERA_2 !== 'CONECTADA') return fail('CAMARAS_NO_LISTAS');
   if (!i.shortTestPassed) return fail('PRUEBA_CORTA_PENDIENTE');
   if (!i.lotId || !i.rowId || !i.lateral || !i.markerId) return fail('CONTEXTO_INCOMPLETO');
   for (const d of i.devices) {
-    if (d.batteryPct !== null && d.batteryPct < i.minBatteryPct) return fail('BATERIA_BAJA');
     if (d.freeSpaceBytes !== null && d.freeSpaceBytes < i.minFreeSpaceBytes) return fail('ESPACIO_BAJO');
   }
   return OK;
@@ -65,7 +63,6 @@ export interface ResumeInput {
   links: Record<CameraRole, CameraLinkStatus>;
   resyncInProgress: boolean;
   devices: DeviceHealth[];
-  pauseBatteryPct: number;
   pauseFreeSpaceBytes: number;
 }
 
@@ -74,7 +71,6 @@ export function canResumePass(i: ResumeInput): RuleResult {
   if (i.links.CAMERA_1 !== 'CONECTADA' || i.links.CAMERA_2 !== 'CONECTADA') return fail('CAMARAS_NO_LISTAS');
   if (i.resyncInProgress) return fail('RESYNC_EN_CURSO');
   for (const d of i.devices) {
-    if (d.batteryPct !== null && d.batteryPct < i.pauseBatteryPct) return fail('BATERIA_CRITICA');
     if (d.freeSpaceBytes !== null && d.freeSpaceBytes < i.pauseFreeSpaceBytes) return fail('ESPACIO_CRITICO');
   }
   return OK;

@@ -452,6 +452,9 @@ class ControllerRuntime {
 
   // ============================================================== salud del equipo (RF-46)
 
+  /** Ya se mostró el aviso de batería baja (se vuelve a mostrar si sube y vuelve a bajar). */
+  private lowBatteryNotified = false;
+
   private async checkDeviceHealth(): Promise<void> {
     const bat = await batteryPct();
     const space = freeSpace();
@@ -460,20 +463,23 @@ class ControllerRuntime {
     const d = CONFIG.device;
     const devices: { bat: number | null; space: number | null }[] = [{ bat, space }];
     for (const p of this.peers.values()) if (p.paired) devices.push({ bat: p.batteryLevel, space: p.freeSpaceBytes });
-    let pauseReason: 'BATERIA' | 'ESPACIO' | null = null;
+    let pauseReason: 'ESPACIO' | null = null;
+    // CFG-7: la batería solo AVISA (debajo de lowBatteryAlertPct); nunca bloquea ni pausa.
+    const lowBattery = devices.some((x) => x.bat !== null && x.bat < d.lowBatteryAlertPct);
+    if (lowBattery) alerts.push('BATERIA_BAJA');
     for (const x of devices) {
-      if (x.bat !== null && x.bat < d.pauseBatteryPct) pauseReason = 'BATERIA';
-      else if (x.bat !== null && x.bat < d.warnBatteryPct && !alerts.includes('BATERIA_BAJA')) alerts.push('BATERIA_BAJA');
-      if (x.space !== null && x.space < d.pauseFreeSpaceBytes) pauseReason = pauseReason ?? 'ESPACIO';
+      if (x.space !== null && x.space < d.pauseFreeSpaceBytes) pauseReason = 'ESPACIO';
       else if (x.space !== null && x.space < d.warnFreeSpaceBytes && !alerts.includes('ESPACIO_BAJO'))
         alerts.push('ESPACIO_BAJO');
     }
-    if (pauseReason) alerts.push(pauseReason === 'BATERIA' ? 'BATERIA_CRITICA' : 'ESPACIO_CRITICO');
+    if (pauseReason) alerts.push('ESPACIO_CRITICO');
     if (!latestFix() && this.session && this.session.status !== 'DRAFT') alerts.push('GPS_NO_DISPONIBLE');
     useController.setState({ alerts });
+    if (lowBattery && !this.lowBatteryNotified) pushNotice('BATERIA_BAJA', 'warn'); // una vez por cada bajada
+    this.lowBatteryNotified = lowBattery;
     if (pauseReason && this.pass?.status === 'ACTIVE') {
       await this.pauseInternal(pauseReason);
-      pushNotice(pauseReason === 'BATERIA' ? 'BATERIA_CRITICA' : 'ESPACIO_CRITICO', 'error');
+      pushNotice('ESPACIO_CRITICO', 'error');
     }
   }
 
@@ -1293,7 +1299,6 @@ class ControllerRuntime {
         lateral: input.lateral,
         markerId: input.markerId,
         devices: this.healthList(),
-        minBatteryPct: CONFIG.device.minBatteryToStartPct,
         minFreeSpaceBytes: CONFIG.device.minFreeSpaceToStartBytes,
       });
       if (!rule.ok) return fail(rule.code);
@@ -1494,7 +1499,6 @@ class ControllerRuntime {
         links: this.links(),
         resyncInProgress: this.resyncing.size > 0,
         devices: this.healthList(),
-        pauseBatteryPct: CONFIG.device.pauseBatteryPct,
         pauseFreeSpaceBytes: CONFIG.device.pauseFreeSpaceBytes,
       });
       if (!rule.ok) return fail(rule.code);

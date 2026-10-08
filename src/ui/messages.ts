@@ -21,7 +21,6 @@ export type AppErrorCode =
   | 'HILERA_SIN_MARCADORES'
   | 'CATALOGOS_ANTIGUOS'
   | 'BATERIA_BAJA'
-  | 'BATERIA_CRITICA'
   | 'ESPACIO_BAJO'
   | 'ESPACIO_CRITICO'
   | 'CAMARAS_NO_LISTAS'
@@ -155,8 +154,7 @@ export const APP_ERROR_MESSAGES: Record<AppErrorCode, string> = {
     'El servidor todavía no tiene lotes con hileras activas. Pide que los carguen en la web (Gestión) y vuelve a tocar «Actualizar».',
   HILERA_SIN_MARCADORES: 'Esta hilera no tiene marcadores. Agrégalos en la web (Gestión → Marcadores) y actualiza los catálogos.',
   CATALOGOS_ANTIGUOS: 'Los catálogos tienen varios días. Actualízalos si tienes internet.',
-  BATERIA_BAJA: 'Batería baja: conecta el power bank.',
-  BATERIA_CRITICA: 'Batería crítica: la pasada se pausó.',
+  BATERIA_BAJA: 'Batería baja (menos de 15 %): conecta el power bank.',
   ESPACIO_BAJO: 'Queda poco espacio libre. Sincroniza y libera espacio al volver.',
   ESPACIO_CRITICO: 'Espacio insuficiente: la pasada se pausó.',
   CAMARAS_NO_LISTAS: 'Las dos cámaras deben estar conectadas para iniciar la pasada.',

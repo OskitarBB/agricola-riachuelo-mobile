@@ -15,6 +15,7 @@ import { Animated, StyleSheet, Text, View, useAnimatedValue } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppSession } from '../../src/auth/authStore';
+import { CONFIG } from '../../src/config';
 import { cameraAgent } from '../../src/camera/cameraAgent';
 import { useCameraLive } from '../../src/camera/cameraStore';
 import { formatTime } from '../../src/domain/time';
@@ -63,6 +64,8 @@ export default function LiveCameraScreen() {
     Animated.timing(flash, { toValue: 0, duration: 380, useNativeDriver: true }).start();
   }, [flashCount, flash]);
 
+  // CFG-7: único aviso de batería (no bloquea ni pausa).
+  const lowBattery = live.battery !== null && live.battery < CONFIG.device.lowBatteryAlertPct;
   const connected = live.link === 'CONECTADO' && live.paired;
   const passActive = !!live.passId && !live.paused;
   let stripTone: 'ok' | 'warn' | 'error' | 'info' = 'info';
@@ -148,7 +151,7 @@ export default function LiveCameraScreen() {
           </View>
           <View style={styles.flexItem}>
             <Text style={styles.k}>{S.settings.battery}</Text>
-            <Text style={styles.v}>{formatPct(live.battery)}</Text>
+            <Text style={[styles.v, lowBattery && styles.vWarn]}>{formatPct(live.battery)}</Text>
             <Text style={styles.k}>{S.settings.freeSpace}</Text>
             <Text style={styles.v}>{formatBytes(live.freeSpace)}</Text>
           </View>
@@ -166,6 +169,7 @@ export default function LiveCameraScreen() {
             </View>
           </FadeIn>
         ) : null}
+        {lowBattery ? <Text style={styles.notice}>{messageFor('BATERIA_BAJA')}</Text> : null}
         {live.otherControllerPhotos ? <Text style={styles.notice}>{messageFor('FOTOS_DE_OTRO_CONTROLADOR')}</Text> : null}
 
         {!connected ? (
@@ -209,6 +213,7 @@ const styles = StyleSheet.create({
   dataRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   k: { color: '#B9D3C0', fontSize: 14 },
   v: { color: '#fff', fontSize: 20, fontWeight: font.weightBold, marginBottom: 4 },
+  vWarn: { color: colors.goldLight },
   last: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   notice: { color: '#fff', backgroundColor: colors.warn, padding: 10, borderRadius: radius.sm, fontSize: font.body },
   row: { flexDirection: 'row', gap: 10 },

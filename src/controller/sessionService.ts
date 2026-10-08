@@ -42,7 +42,6 @@ export async function createDraft(
   }
   const modeRule: RuleResult = validateSessionMode(i.mode, i.intervalMs, CONFIG.capture);
   if (!modeRule.ok) return { ok: false, code: modeRule.code };
-  if (i.batteryPct !== null && i.batteryPct < CONFIG.device.minBatteryToStartPct) return { ok: false, code: 'BATERIA_BAJA' };
   if (i.freeSpaceBytes !== null && i.freeSpaceBytes < CONFIG.device.minFreeSpaceToStartBytes)
     return { ok: false, code: 'ESPACIO_BAJO' };
   const current = await getCurrentSession(true);

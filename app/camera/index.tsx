@@ -66,7 +66,7 @@ export default function ScanScreen() {
     setScanKey((k) => k + 1);
   };
 
-  const lowBattery = live.battery !== null && live.battery < CONFIG.device.minBatteryToStartPct;
+  const lowBattery = live.battery !== null && live.battery < CONFIG.device.lowBatteryAlertPct;
   const lowSpace = live.freeSpace !== null && live.freeSpace < CONFIG.device.minFreeSpaceToStartBytes;
 
   const onScan = async (data: string) => {
@@ -144,6 +144,7 @@ export default function ScanScreen() {
                 </Text>
               </View>
             </View>
+            {lowBattery ? <Text style={styles.batteryNotice}>{messageFor('BATERIA_BAJA')}</Text> : null}
             {live.sessionId ? (
               <AppButton title={S.camera.liveTitle} variant="gold" onPress={() => router.replace('/camera/live')} />
             ) : null}
@@ -197,4 +198,5 @@ const styles = StyleSheet.create({
   k: { color: '#B9D3C0', fontSize: 14 },
   v: { color: '#fff', fontSize: 18, fontWeight: font.weightBold },
   vWarn: { color: colors.goldLight },
+  batteryNotice: { color: '#fff', backgroundColor: colors.warn, padding: 10, borderRadius: 10, fontSize: 15, marginBottom: 10 },
 });

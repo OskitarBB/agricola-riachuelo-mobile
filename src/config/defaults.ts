@@ -1,4 +1,4 @@
-// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-6).
+// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-7).
 //
 // QUÉ HACE: concentra TODOS los umbrales, tiempos, puertos e intervalos (regla R-08 del maestro:
 // ningún número "suelto" en el código). Los servicios leen estos valores a través de src/config/index.ts.
@@ -34,9 +34,15 @@
 //    de react-native-tcp-socket en base64). Dos fotos (13 MB) tardaban ~17 s y la prueba corta pasaba de 20 s.
 //    Con JPEG 85 el tamaño baja a ~1/3 sin pérdida visible para revisión ni para YOLO (que reduce la imagen).
 //
+// CAMBIOS CFG-6 → CFG-7 (pedido del equipo tras la prueba de campo del 07/10/2026):
+//  - device.minBatteryToStartPct (30), warnBatteryPct (25) y pauseBatteryPct (15) → un solo device.lowBatteryAlertPct
+//    (15). La batería ya NO bloquea crear la sesión ni iniciar o reanudar una pasada, y NO pausa la pasada: debajo de
+//    15 % solo aparece «Batería baja: conecta el power bank» (controlador, en su pantalla, y cámara, en PANT-30/31).
+//    Las fotos y datos están en SQLite: si un celular se apaga, se recuperan al encenderlo (8.10).
+//
 // Los valores marcados "calibrar" son iniciales: se ajustan con mediciones y NO son resultados validados.
 
-export const CONFIG_VERSION = 'CFG-6';
+export const CONFIG_VERSION = 'CFG-7';
 
 export interface AppConfig {
   auth: {
@@ -155,9 +161,7 @@ export interface AppConfig {
     warnAccuracyM: number; // calibrar
   };
   device: {
-    minBatteryToStartPct: number;
-    warnBatteryPct: number;
-    pauseBatteryPct: number;
+    lowBatteryAlertPct: number; // CFG-7: único umbral de batería; debajo solo se avisa «conecta el power bank»
     warnFreeSpaceBytes: number;
     minFreeSpaceToStartBytes: number;
     pauseFreeSpaceBytes: number;
@@ -282,9 +286,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
   gps: { timeIntervalMs: 1_000, distanceIntervalM: 0, maxAgeMs: 10_000, warnAccuracyM: 15 },
   device: {
-    minBatteryToStartPct: 30,
-    warnBatteryPct: 25,
-    pauseBatteryPct: 15,
+    lowBatteryAlertPct: 15, // CFG-7: solo aviso (no bloquea crear sesión ni iniciar/reanudar, no pausa)
     warnFreeSpaceBytes: 3 * GB,
     minFreeSpaceToStartBytes: 2 * GB,
     pauseFreeSpaceBytes: 1 * GB,
@@ -318,8 +320,7 @@ export function checkConfigCoherence(cfg: AppConfig): string[] {
   if (cfg.shortTest.timeoutMs <= p.captureResponseTimeoutMs) errors.push('shortTest.timeoutMs ≤ captureResponseTimeoutMs');
   if (p.ackTimeoutMs >= p.lostAfterMs) errors.push('ackTimeoutMs ≥ lostAfterMs');
   const d = cfg.device;
-  if (!(d.pauseBatteryPct < d.warnBatteryPct && d.warnBatteryPct < d.minBatteryToStartPct))
-    errors.push('batería: pausa < aviso < inicio');
+  if (!(d.lowBatteryAlertPct >= 5 && d.lowBatteryAlertPct <= 50)) errors.push('batería: lowBatteryAlertPct fuera de 5–50 %');
   if (!(d.pauseFreeSpaceBytes < d.minFreeSpaceToStartBytes && d.minFreeSpaceToStartBytes < d.warnFreeSpaceBytes)) {
     errors.push('espacio: pausa < inicio < aviso');
   }

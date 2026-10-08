@@ -1,3 +1,31 @@
+# Informe de avance — App móvil v0.4.6 (formato maestro §23.2)
+
+**Tarea:** batería: un solo aviso. **Fecha:** 2026-10-07 · **CFG-7** · esquema SQLite 4.
+
+## Cambio (pedido del equipo)
+Antes había tres umbrales: no se podía crear la sesión ni iniciar una pasada con menos de 30 %, aviso con menos de
+25 % y pausa automática con menos de 15 %. Ahora hay **uno solo**: con menos de **15 %** en cualquiera de los tres
+celulares aparece «Batería baja (menos de 15 %): conecta el power bank.» Nada más: no bloquea crear la sesión, ni
+iniciar o reanudar la pasada, y no la pausa.
+- Controlador: aviso en la pantalla principal y en la pasada activa (de cualquiera de los tres celulares), más un
+  aviso emergente una vez cada vez que baja de 15 %.
+- Cámaras: aviso y porcentaje resaltado en PANT-30 y PANT-31 (su propia batería).
+- `device.minBatteryToStartPct`, `warnBatteryPct` y `pauseBatteryPct` → `device.lowBatteryAlertPct = 15`
+  (regla de coherencia 5–50 %). Se quitan las reglas de batería de `canStartPass`, `canResumePass` y `createDraft`,
+  y el mensaje BATERIA_CRITICA. El espacio libre sigue igual (aviso, bloqueo y pausa).
+- Si un celular se apaga, sus datos y fotos siguen en SQLite y se recuperan al encenderlo (8.10).
+- CONFIG_VERSION **CFG-7**. Versión 0.4.6 (Android versionCode 9, iOS build 9).
+
+## Archivos
+`src/config/defaults.ts`, `src/domain/rules.ts`, `src/controller/{controllerRuntime,sessionService}.ts`,
+`src/ui/messages.ts`, `app/camera/{index,live}.tsx`, `__tests__/{domain,config}.test.ts`, `app.json`,
+`package.json`, `package-lock.json`, `README.md`.
+
+## Resultado
+`tsc`: 0 errores en la app. Pruebas: **124 OK**. Simulado 9/9, integración con Django local 29/29.
+
+---
+
 # Informe de avance — App móvil v0.4.5 (formato maestro §23.2)
 
 **Tarea:** cuarta prueba con tres Android: la prueba corta ya aprueba. **Fecha:** 2026-10-07 · CFG-6 · esquema SQLite 4.

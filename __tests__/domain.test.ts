@@ -109,7 +109,6 @@ describe('reglas de negocio', () => {
       lateral: 'LATERAL_A' as const,
       markerId: 'M1',
       devices: healthy,
-      minBatteryPct: 30,
       minFreeSpaceBytes: 2e9,
     };
     expect(canStartPass(base)).toEqual({ ok: true });
@@ -119,15 +118,18 @@ describe('reglas de negocio', () => {
     });
     expect(canStartPass({ ...base, shortTestPassed: false })).toEqual({ ok: false, code: 'PRUEBA_CORTA_PENDIENTE' });
     expect(canStartPass({ ...base, markerId: null })).toEqual({ ok: false, code: 'CONTEXTO_INCOMPLETO' });
-    expect(canStartPass({ ...base, devices: [{ batteryPct: 10, freeSpaceBytes: null }] })).toEqual({
+    // CFG-7: la batería baja solo avisa; no bloquea el inicio.
+    expect(canStartPass({ ...base, devices: [{ batteryPct: 5, freeSpaceBytes: null }] })).toEqual({ ok: true });
+    expect(canStartPass({ ...base, devices: [{ batteryPct: 90, freeSpaceBytes: 1e9 }] })).toEqual({
       ok: false,
-      code: 'BATERIA_BAJA',
+      code: 'ESPACIO_BAJO',
     });
   });
 
   test('RN-10 reanudación', () => {
-    const base = { links, resyncInProgress: false, devices: healthy, pauseBatteryPct: 15, pauseFreeSpaceBytes: 1e9 };
+    const base = { links, resyncInProgress: false, devices: healthy, pauseFreeSpaceBytes: 1e9 };
     expect(canResumePass(base).ok).toBe(true);
+    expect(canResumePass({ ...base, devices: [{ batteryPct: 3, freeSpaceBytes: null }] }).ok).toBe(true); // CFG-7
     expect(canResumePass({ ...base, resyncInProgress: true })).toEqual({ ok: false, code: 'RESYNC_EN_CURSO' });
   });
 
