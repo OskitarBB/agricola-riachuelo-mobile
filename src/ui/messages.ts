@@ -28,7 +28,6 @@ export type AppErrorCode =
   | 'PRUEBA_CORTA_PENDIENTE'
   | 'CAMARA_DESCONECTADA'
   | 'ORDEN_VENCIDA'
-  | 'SESION_ABIERTA_IMPIDE_SALIR'
   | 'CAMBIO_FUNCION_BLOQUEADO'
   | 'PENDIENTES_DE_TRANSFERENCIA'
   | 'CIERRE_CON_PENDIENTES'
@@ -164,7 +163,6 @@ export const APP_ERROR_MESSAGES: Record<AppErrorCode, string> = {
   PRUEBA_CORTA_PENDIENTE: 'Haz la prueba corta antes de iniciar la primera pasada.',
   CAMARA_DESCONECTADA: 'Se perdió la conexión con una cámara. La pasada se pausó.',
   ORDEN_VENCIDA: 'La orden llegó tarde y se descartó.',
-  SESION_ABIERTA_IMPIDE_SALIR: 'Cierra la sesión de monitoreo antes de cerrar tu sesión de usuario.',
   CAMBIO_FUNCION_BLOQUEADO: 'No puedes cambiar la función con una sesión abierta o con pendientes en este celular.',
   PENDIENTES_DE_TRANSFERENCIA: 'Hay fotos pendientes de enviar al controlador.',
   CIERRE_CON_PENDIENTES:

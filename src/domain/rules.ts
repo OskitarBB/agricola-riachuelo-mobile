@@ -1,4 +1,4 @@
-// src/domain/rules.ts — Reglas de negocio como funciones puras (RN-06, RN-10 a RN-13, RN-15, RN-19, RN-21).
+// src/domain/rules.ts — Reglas de negocio como funciones puras (RN-06, RN-10 a RN-13, RN-15, RN-21).
 //
 // QUÉ HACE: cada función recibe datos ya leídos (no toca SQLite ni la red) y devuelve una decisión.
 // Así se prueban con Jest (__tests__/rules.test.ts) y los servicios las reutilizan sin duplicar lógica.
@@ -198,10 +198,8 @@ export function validatePassDirection(lateral: LateralCode, direction: Direction
   return OK;
 }
 
-/** RN-19 — No se cierra la sesión de usuario con una sesión de monitoreo abierta. */
-export function canLogout(hasOpenSession: boolean): RuleResult {
-  return hasOpenSession ? fail('SESION_ABIERTA_IMPIDE_SALIR') : OK;
-}
+// RN-19 (modificada en v0.4.5, ADR 0008): cerrar la sesión de usuario ya no se bloquea con una sesión de monitoreo
+// abierta; la sesión queda guardada en el celular y se recupera al volver a entrar (src/ui/hooks/useLogout.ts).
 
 /**
  * Contexto §25.1/25.2 — Reglas de interfaz del modo de captura.

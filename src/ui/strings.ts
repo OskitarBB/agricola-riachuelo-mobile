@@ -159,6 +159,8 @@ export const S = {
     haptics: 'Vibración',
     gallery: 'Fotos guardadas',
     logoutConfirm: '¿Cerrar tu sesión en este celular?',
+    logoutConfirmOpenSession:
+      'Hay una sesión de monitoreo abierta en este celular. Quedará guardada con todas sus fotos (la pasada en curso se pausa). Al volver a iniciar sesión podrás continuarla o cerrarla.',
     retried: (n: number) => `${n} foto(s) vuelven a la cola.`,
     exported: 'Diagnóstico listo para compartir.',
     server: 'Servidor',

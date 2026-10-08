@@ -31,6 +31,8 @@ export interface CameraLiveState {
   battery: number | null;
   freeSpace: number | null;
   flash: number; // contador para animar el destello al capturar
+  /** v0.4.5: el controlador cerró la sesión de monitoreo; PANT-31 vuelve a PANT-08 (elegir función). */
+  sessionEnded: boolean;
 }
 
 export const initialCameraState = (): CameraLiveState => ({
@@ -53,6 +55,7 @@ export const initialCameraState = (): CameraLiveState => ({
   battery: null,
   freeSpace: null,
   flash: 0,
+  sessionEnded: false,
 });
 
 export const useCameraLive = create<CameraLiveState>(() => initialCameraState());

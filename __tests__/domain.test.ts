@@ -19,7 +19,6 @@ import {
   canChangeMarker,
   canCreatePass,
   canIssueCommand,
-  canLogout,
   canResumePass,
   canStartPass,
   isLateralRepeat,
@@ -158,11 +157,10 @@ describe('reglas de negocio', () => {
     expect(isRowCovered([{ lateralCode: 'LATERAL_A', status: 'COMPLETED' }])).toBe(false);
   });
 
-  test('RN-15 y RN-19', () => {
+  test('RN-15', () => {
     expect(canChangeDeviceRole(false, 0, 0).ok).toBe(true);
     expect(canChangeDeviceRole(true, 0, 0)).toEqual({ ok: false, code: 'CAMBIO_FUNCION_BLOQUEADO' });
     expect(canChangeDeviceRole(false, 2, 0).ok).toBe(false);
-    expect(canLogout(true)).toEqual({ ok: false, code: 'SESION_ABIERTA_IMPIDE_SALIR' });
   });
 
   test('contexto §25.1: MANUAL ignora el intervalo; AUTOMÁTICO lo exige dentro de límites', () => {

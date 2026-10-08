@@ -64,7 +64,7 @@ export default function ChangePasswordScreen() {
   };
 
   const doLogout = async () => {
-    await logout(false);
+    await logout();
     router.replace('/login');
   };
 

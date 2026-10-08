@@ -480,6 +480,7 @@ class CameraAgent {
         ...initialCameraState(),
         battery: useCameraLive.getState().battery,
         freeSpace: useCameraLive.getState().freeSpace,
+        sessionEnded: reason === 'SESSION_CLOSED' || reason === 'SESSION_CLOSED_REJECT',
       });
     }
     await this.queue.refreshCounts();

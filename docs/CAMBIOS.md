@@ -1,3 +1,37 @@
+# Informe de avance — App móvil v0.4.5 (formato maestro §23.2)
+
+**Tarea:** cuarta prueba con tres Android: la prueba corta ya aprueba. **Fecha:** 2026-10-07 · CFG-6 · esquema SQLite 4.
+
+## Qué se vio
+- PANT-15 no deja iniciar la pasada: la hilera no tiene segmentos ni marcadores. En el piloto solo se cargaron lotes e
+  hileras (diagnóstico: `segments: 0, markers: 0`); la app pide un marcador de inicio.
+- «Cerrar sesión» decía «Cierra la sesión de monitoreo antes de cerrar tu sesión de usuario» (RN-19).
+
+## Cambios
+- **Segmentos (servidor, sin cambiar la app):** `tools/servidor/crear_segmentos_hilera_completa.py`, para el VPS de la
+  plataforma. Crea, solo en las hileras activas SIN segmentos ni marcadores, un segmento «Hxx completa» (planta 1 a la
+  última) con marcadores «Hxx inicio» (INICIO) y «Hxx fin» (FIN), sin coordenadas. Repetirlo no duplica nada.
+  Probado en una copia de la base local: 71 hileras completadas, segunda ejecución 0; el bootstrap los entrega.
+  Los marcadores reales del campo (Q-01) se cargan después en /gestion/ y reemplazan a estos.
+- **Cerrar sesión con una sesión de monitoreo abierta (ADR 0008, RN-19 modificada):** se permite con un aviso; la
+  pasada en curso del controlador se pausa y la sesión queda guardada para recuperarla al volver a entrar.
+- **Al cerrar la sesión de monitoreo se vuelve a PANT-08** (elegir función): en el controlador desde PANT-19 y en las
+  cámaras al recibir SESSION_CLOSED (`sessionEnded` en cameraStore). RN-15 sigue: con datos pendientes solo se puede
+  seguir con la misma función.
+- Versión 0.4.5 (Android versionCode 8, iOS build 8).
+
+## Archivos
+Nuevos: `docs/adr/0008-cerrar-sesion-con-monitoreo-abierto.md`, `tools/servidor/crear_segmentos_hilera_completa.py`.
+Modificados: `src/ui/hooks/useLogout.ts`, `src/auth/authService.ts`, `src/domain/rules.ts`, `src/ui/messages.ts`,
+`src/ui/strings.ts`, `app/change-password.tsx`, `app/controller/session-summary.tsx`, `app/camera/_layout.tsx`,
+`src/camera/cameraStore.ts`, `src/camera/cameraAgent.ts`, `__tests__/domain.test.ts`, `app.json`, `package.json`,
+`package-lock.json`, `README.md`.
+
+## Resultado
+`tsc`: 0 errores en la app. Pruebas: 123 OK. Red local 9/9, simulado 9/9, integración con Django local 29/29.
+
+---
+
 # Informe de avance — App móvil v0.4.4 (formato maestro §23.2)
 
 **Tarea:** tercera prueba con tres Android (prueba corta con v0.4.3). **Fecha:** 2026-10-07 · **CFG-6** · esquema SQLite 4.

@@ -18,7 +18,8 @@
 //    (clase RENOVAR_TOKEN del Anexo C.3).
 //  - noteServerTime(): guarda la diferencia entre la hora del servidor (serverTime de login, refresh, health y
 //    bootstrap) y la del celular; un celular con la hora mal puesta no debe usar tokens vencidos ni renovarlos de más.
-//  - logout(): bloqueado si hay una sesión de monitoreo abierta (RN-19).
+//  - logout(): borra los tokens. Desde v0.4.5 se permite con una sesión de monitoreo abierta (RN-19 modificada,
+//    ADR 0008): la sesión queda guardada y se recupera (8.10) al volver a iniciar sesión, como en la revocación.
 //
 // Backend real: la plataforma Django /api/v1 (src/api/index.ts elige el cliente real o el simulado).
 
@@ -27,7 +28,6 @@ import * as Crypto from 'expo-crypto';
 import { ApiError, authApi } from '../api';
 import type { ApiErrorCode, LoginResponse } from '../api/dto';
 import { CONFIG } from '../config';
-import { canLogout } from '../domain/rules';
 import { nowIso, nowMs } from '../domain/time';
 import { MOBILE_ALLOWED_ROLES, type AuthStatus, type UserProfile } from '../domain/types';
 import { deviceInfoDto, getDeviceIdentity } from '../device/deviceIdentity';
@@ -409,11 +409,10 @@ export async function revoke(code: string): Promise<void> {
   logEvent('WARN', 'AUTH', 'REVOKED', { code });
 }
 
-// ------------------------------------------------------------------ cierre de sesión (7.8, RN-19)
+// ------------------------------------------------------------------ cierre de sesión (7.8; RN-19 modificada, ADR 0008)
 
-export async function logout(hasOpenMonitoringSession: boolean): Promise<AuthResult> {
-  const rule = canLogout(hasOpenMonitoringSession);
-  if (!rule.ok) return { ok: false, code: rule.code };
+/** Cierra la sesión de usuario. Una sesión de monitoreo abierta NO lo impide: queda guardada y se recupera (8.10). */
+export async function logout(): Promise<AuthResult> {
   const tokens = await loadTokens();
   if (tokens) {
     try {

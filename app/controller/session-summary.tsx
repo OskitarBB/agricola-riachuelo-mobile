@@ -6,11 +6,13 @@
 // Al cerrar: CLOSED + cola de sincronización + SESSION_CLOSED a las cámaras + se borran fotos de prueba corta.
 // Las fotos que falten llegarán después (8.13) cuando la cámara se vincule de nuevo.
 // Fase 4: al cerrar, si hay Wi-Fi y sesión ONLINE, la sincronización automática empieza sola (Supuesto S-08).
+// v0.4.5: después de cerrar se vuelve a PANT-08 (elegir la función del celular).
 
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { useAppSession } from '../../src/auth/authStore';
 import { controllerRuntime } from '../../src/controller/controllerRuntime';
 import { sessionPasses } from '../../src/controller/sessionService';
 import { useController } from '../../src/controller/controllerStore';
@@ -75,8 +77,12 @@ export default function SessionSummaryScreen() {
       return;
     }
     showToast('SESION_CERRADA', 'success');
-    router.replace('/controller');
+    // La sincronización automática se decide ANTES de volver a PANT-08 (mientras se elige la función no arranca).
     void maybeAutoSync('CIERRE');
+    // v0.4.5: con la sesión cerrada, el celular vuelve a PANT-08 para elegir su función (pedido del equipo).
+    // RN-15 sigue vigente: con datos sin sincronizar solo se puede seguir como Controlador.
+    useAppSession.getState().set({ roleChoicePending: true });
+    router.replace('/role');
   };
 
   const totalMissing = missing.CAMERA_1 + missing.CAMERA_2;
