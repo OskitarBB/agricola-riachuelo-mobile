@@ -171,6 +171,28 @@ async function main() {
     console.log(`      (2 MB recibidos en ${reports[0]?.ms} ms)`);
   });
 
+  await step('dos cámaras envían a la vez: cada foto llega UNA vez y cada cámara recibe su respuesta (cierre ordenado, v0.4.4)', async () => {
+    const before = got.length;
+    const send = async (name: string, size: number, role: string) => {
+      const bytes = Buffer.alloc(size);
+      for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 13 + size) % 256;
+      const file = path.join(WORK, name);
+      fs.writeFileSync(file, bytes);
+      const meta = {
+        captureId: randomUUID(), sequenceId: randomUUID(), sessionId, passId: randomUUID(), lateralCode: 'LATERAL_A', isTest: true,
+        deviceId: role === 'CAMERA_1' ? camId : randomUUID(), cameraRole: role, userId: randomUUID(), capturedAt: new Date().toISOString(),
+        width: 4000, height: 3000, sizeBytes: bytes.length, md5: createHash('md5').update(bytes).digest('hex'), qualityStatus: 'UTILIZABLE',
+        qualityReasons: [], qualityMetrics: null, profileVersion: 'Q0', replacesCaptureId: null,
+      };
+      return new UploadFileSender().send(`http://127.0.0.1:${filePort}`, meta as never, `file://${file}`, 20_000);
+    };
+    const [a, b] = await Promise.all([send('c1.jpg', 3 * 1024 * 1024, 'CAMERA_1'), send('c2.jpg', 1536 * 1024, 'CAMERA_2')]);
+    assert.equal(a.result, 'RECEIVED', JSON.stringify(a));
+    assert.equal(b.result, 'RECEIVED', JSON.stringify(b));
+    await wait(300);
+    assert.equal(got.length - before, 2, 'ninguna foto se recibió dos veces');
+  });
+
   await step('foto con metadatos inválidos: 400 INVALID_META (la cámara no reintenta a ciegas)', async () => {
     const file = path.join(WORK, 'mala.jpg');
     fs.writeFileSync(file, Buffer.from('abc'));

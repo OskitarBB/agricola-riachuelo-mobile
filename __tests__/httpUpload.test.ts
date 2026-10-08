@@ -10,7 +10,7 @@ import {
   HttpUploadConnection,
   type UploadSink,
 } from '../src/local-network/httpUpload';
-import { httpStatusFor } from '../src/local-network/tcp/tcpFileReceiver';
+import { closeGracefully, httpStatusFor } from '../src/local-network/tcp/tcpFileReceiver';
 
 function makeSink(expectedMd5: string, store: Map<string, string>, id: string): UploadSink {
   const hash = createHash('md5');
@@ -71,4 +71,42 @@ test('base64url ida y vuelta (con tildes) y tabla de códigos HTTP', () => {
   expect(httpStatusFor({ result: 'REJECTED', reason: 'MD5_MISMATCH' })).toBe(422);
   expect(httpStatusFor({ result: 'REJECTED', reason: 'NO_SPACE' })).toBe(507);
   expect(httpStatusFor({ result: 'REJECTED', reason: 'WRONG_DEVICE' })).toBe(403);
+});
+
+describe('cierre ordenado del receptor (v0.4.4: la cámara reenviaba la foto si la respuesta se cortaba)', () => {
+  function fakeSocket() {
+    const calls: string[] = [];
+    let onClose: (() => void) | null = null;
+    return {
+      calls,
+      closeNow: () => onClose?.(),
+      end: () => calls.push('end'),
+      destroy: () => calls.push('destroy'),
+      onClose: (cb: () => void) => {
+        onClose = cb;
+      },
+    };
+  }
+  const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  test('envía FIN solo después de escribir la respuesta y no destruye si la cámara cierra', async () => {
+    const s = fakeSocket();
+    let flush!: () => void;
+    closeGracefully(s, new Promise<void>((r) => (flush = r)), 50);
+    await tick(10);
+    expect(s.calls).toEqual([]); // la respuesta aún no se escribió: no se cierra nada
+    flush();
+    await tick(5);
+    expect(s.calls).toEqual(['end']);
+    s.closeNow();
+    await tick(80);
+    expect(s.calls).toEqual(['end']);
+  });
+
+  test('si la cámara no cierra, se destruye después de la espera', async () => {
+    const s = fakeSocket();
+    closeGracefully(s, Promise.resolve(), 20);
+    await tick(60);
+    expect(s.calls).toEqual(['end', 'destroy']);
+  });
 });

@@ -27,7 +27,7 @@ describe('prueba corta', () => {
     const o = obs({ totalMs: 18_500 });
     expect(decideShortTest(o, { ...cfg, shortTestTimeoutMs: 15_000 })).toBe('REPROBADA');
     expect(shortTestFailReason(o, { ...cfg, shortTestTimeoutMs: 15_000 }, true)).toBe('DEMASIADO_LENTA');
-    expect(decideShortTest(o, cfg)).toBe('APROBADA'); // con el límite CFG-5 (20 s)
+    expect(decideShortTest(o, cfg)).toBe('APROBADA'); // con el límite de CFG-5/CFG-6 (20 s)
   });
 
   it('motivos: sin respuesta, error de cámara, respuesta lenta y foto que no llegó', () => {

@@ -51,6 +51,36 @@ export function httpStatusFor(r: LocalCaptureResponse): number {
   }
 }
 
+/** Espera máxima a que se escriba la respuesta y a que la cámara cierre después del FIN. */
+const WRITE_FLUSH_TIMEOUT_MS = 5_000;
+const CLOSE_GRACE_MS = 10_000;
+
+export interface ClosableSocket {
+  end(): void;
+  destroy(): void;
+  onClose(cb: () => void): void;
+}
+
+/** Cierre ordenado: espera la escritura de la respuesta, envía FIN (end) y destruye solo si la cámara no cierra. */
+export function closeGracefully(socket: ClosableSocket, lastWrite: Promise<void>, graceMs = CLOSE_GRACE_MS): void {
+  void lastWrite.then(() => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (!done) socket.destroy();
+    }, graceMs);
+    socket.onClose(() => {
+      done = true;
+      clearTimeout(timer);
+    });
+    try {
+      socket.end();
+    } catch {
+      clearTimeout(timer);
+      socket.destroy();
+    }
+  });
+}
+
 function rejected(reason: LocalCaptureResponse['reason']): UploadResult {
   const body: LocalCaptureResponse = { result: 'REJECTED', reason };
   return { status: httpStatusFor(body), body };
@@ -75,11 +105,29 @@ export class TcpFileReceiver implements FileReceiver {
     await new Promise<void>((resolve, fail) => {
       const server = this.tcp.createServer((socket) => {
         const remote = socket.remoteAddress ?? null;
+        // La respuesta debe LLEGAR a la cámara antes de cerrar: write() de react-native-tcp-socket es asíncrono y
+        // destroy() inmediato podía cortarla; la cámara veía un error de red y reenviaba la misma foto (v0.4.4).
+        let lastWrite: Promise<void> = Promise.resolve();
         const conn = new HttpUploadConnection(
           (bytes) => {
-            socket.write(bytes);
+            lastWrite = new Promise<void>((written) => {
+              const fallback = setTimeout(written, WRITE_FLUSH_TIMEOUT_MS);
+              try {
+                socket.write(bytes, undefined, () => {
+                  clearTimeout(fallback);
+                  written();
+                });
+              } catch {
+                clearTimeout(fallback); // socket ya cerrado
+                written();
+              }
+            });
           },
-          () => socket.destroy(),
+          () =>
+            closeGracefully(
+              { end: () => socket.end(), destroy: () => socket.destroy(), onClose: (cb) => socket.on('close', cb) },
+              lastWrite,
+            ),
           async (head, contentLength) => {
             if (head.method !== 'POST' || head.path.split('?')[0] !== '/local/captures') return rejected('NOT_FOUND');
             let meta: LocalCaptureMeta;

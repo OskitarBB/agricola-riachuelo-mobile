@@ -1,3 +1,48 @@
+# Informe de avance — App móvil v0.4.4 (formato maestro §23.2)
+
+**Tarea:** tercera prueba con tres Android (prueba corta con v0.4.3). **Fecha:** 2026-10-07 · **CFG-6** · esquema SQLite 4.
+
+## Qué se vio (diagnóstico del controlador SM-A035M)
+Seis pruebas cortas: ambas cámaras CAPTURE_OK y UTILIZABLE, la foto llegó, desfase 7–178 ms, pero «Reprobada» por
+tiempo total (21,6–22,3 s con límite 20 s). Datos del registro:
+- Captura (orden → CAPTURE_OK): 3,5–3,7 s en la Cámara 2 y 4,6–4,7 s en la Cámara 1.
+- Tamaño de la foto: **8,9–9,0 MB** en la Cámara 1 y 3,4–4,5 MB en la Cámara 2, con `jpegQuality = 1` (JPEG 100).
+  La de la Cámara 1 queda a 1 MB del límite de Cloudinary Free (10 MB).
+- Recepción en el controlador: **~0,75 MB/s en total**, con una o dos fotos a la vez (13 MB ≈ 17 s). Cada bloque
+  cruza el puente de react-native-tcp-socket en base64 y se decodifica en JavaScript; en un celular de gama de entrada
+  ese es el cuello de botella, y los mensajes de control que llegan detrás esperan (una vez CAPTURE_OK llegó 17 s tarde).
+- **Cada foto de la Cámara 1 llegaba dos veces** (p. ej. 01:18:03 y otra vez 01:18:17): ~12 s extra de recepción que
+  frenaban la prueba siguiente.
+
+## Causas y cambios
+- **Reenvío de la misma foto:** al terminar, el receptor escribía la respuesta y llamaba a `destroy()` en seguida;
+  `write()` de react-native-tcp-socket es asíncrono y el cierre podía cortar la respuesta. La cámara veía un error
+  de red y, a los 2 s, reenviaba la foto (el controlador la descartaba por idempotencia, pero ya la había recibido
+  entera). Ahora `closeGracefully`: espera a que se escriba la respuesta, envía FIN (`end()`) y solo destruye el
+  socket si la cámara no cierra en 10 s.
+- **Fotos más livianas:** `capture.jpegQuality` 1 → **0,85** (CFG-6, calibrar). Es el ajuste del codificador AL
+  TOMAR la foto: el original guardado, transferido y subido a Cloudinary es esa foto, sin recomprimir después
+  (RN-24 / RF-49 se mantienen). Se espera ~1/3 del tamaño (≈ 3 MB a 12 MP), sin pérdida visible para la revisión ni
+  para YOLO, que reduce la imagen. Nueva regla de coherencia: `jpegQuality` entre 0,6 y 0,95.
+- CONFIG_VERSION **CFG-6**. Versión 0.4.4 (Android versionCode 7, iOS build 7).
+
+## Archivos
+Modificados: `src/local-network/tcp/tcpFileReceiver.ts`, `src/config/defaults.ts`, `__tests__/config.test.ts`,
+`__tests__/httpUpload.test.ts`, `__tests__/shortTest.test.ts`, `tools/verificacion/redlocal.ts`, `app.json`,
+`package.json`, `package-lock.json`, `README.md`.
+
+## Resultado
+`tsc`: 0 errores en la app. Pruebas: **123 OK** (nuevas: cierre ordenado del receptor y regla de `jpegQuality`).
+Red local (`redlocal.ts`): **9/9**, incluida «dos cámaras envían a la vez: cada foto llega una vez». Simulado 9/9,
+integración con Django local 29/29, actualización 001 → 004 OK.
+
+## Pendiente de medir en campo
+- Tamaño de las fotos con JPEG 85 (`TRANSFER/RECEIVED` del controlador) y tiempo total de la prueba corta.
+- Si con fotos de ~3 MB la recepción sigue limitando, la siguiente opción es que el controlador **descargue** la foto
+  de cada cámara con el cliente HTTP nativo (sin pasar los bytes por JavaScript del controlador): cambio de §14.8.
+
+---
+
 # Informe de avance — App móvil v0.4.3 (formato maestro §23.2)
 
 **Tarea:** segunda prueba con tres Android (prueba corta). **Fecha:** 2026-10-07 · **CFG-5** · esquema SQLite 4.

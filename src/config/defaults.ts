@@ -1,4 +1,4 @@
-// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-5).
+// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-6).
 //
 // QUÉ HACE: concentra TODOS los umbrales, tiempos, puertos e intervalos (regla R-08 del maestro:
 // ningún número "suelto" en el código). Los servicios leen estos valores a través de src/config/index.ts.
@@ -28,9 +28,15 @@
 //    Se elige la mayor resolución ≤ 12 MP, preferiblemente 4:3 (src/domain/pictureSize.ts). La foto NO se recomprime.
 //  - shortTest.timeoutMs: 15 000 → 20 000 ms (calibrar): margen para dos fotos de 12 MP por el mismo Wi-Fi.
 //
+// CAMBIOS CFG-5 → CFG-6 (segunda prueba con tres Android, 07/10/2026; diagnóstico del controlador SM-A035M):
+//  - capture.jpegQuality: 1 → 0,85 (calibrar). Con calidad 1 (JPEG 100) una foto de 12 MP pesaba 8,9 MB: casi el
+//    límite de Cloudinary Free (10 MB) y el controlador recibía solo ~0,75 MB/s en total (cada bloque cruza el puente
+//    de react-native-tcp-socket en base64). Dos fotos (13 MB) tardaban ~17 s y la prueba corta pasaba de 20 s.
+//    Con JPEG 85 el tamaño baja a ~1/3 sin pérdida visible para revisión ni para YOLO (que reduce la imagen).
+//
 // Los valores marcados "calibrar" son iniciales: se ajustan con mediciones y NO son resultados validados.
 
-export const CONFIG_VERSION = 'CFG-5';
+export const CONFIG_VERSION = 'CFG-6';
 
 export interface AppConfig {
   auth: {
@@ -221,7 +227,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     minIntervalMs: 1_000,
     maxIntervalMs: 10_000,
     intervalOptionsMs: [1_000, 2_000, 3_000, 5_000],
-    jpegQuality: 1,
+    jpegQuality: 0.85, // calibrar (CFG-6): JPEG 85; con 1 una foto de 12 MP pesaba ~9 MB
     maxMegapixels: 12, // calibrar (Q-15): ≤ 25 MP y ≤ 10 MB por foto (Cloudinary Free)
     shutterSound: false,
     captureBudgetMs: 2_000,
@@ -307,6 +313,8 @@ export function checkConfigCoherence(cfg: AppConfig): string[] {
   if (p.captureResponseTimeoutMs < autoBudget) errors.push('captureResponseTimeoutMs < estabilidad + captura + calidad + 500');
   if (p.commandValidityMs >= p.captureResponseTimeoutMs) errors.push('commandValidityMs ≥ captureResponseTimeoutMs');
   if (!(cfg.capture.maxMegapixels >= 2 && cfg.capture.maxMegapixels <= 25)) errors.push('capture.maxMegapixels fuera de 2–25 MP (Cloudinary Free: 25 MP)');
+  if (!(cfg.capture.jpegQuality >= 0.6 && cfg.capture.jpegQuality <= 0.95))
+    errors.push('capture.jpegQuality fuera de 0,6–0,95 (1 = JPEG 100: fotos de ~9 MB a 12 MP)');
   if (cfg.shortTest.timeoutMs <= p.captureResponseTimeoutMs) errors.push('shortTest.timeoutMs ≤ captureResponseTimeoutMs');
   if (p.ackTimeoutMs >= p.lostAfterMs) errors.push('ackTimeoutMs ≥ lostAfterMs');
   const d = cfg.device;

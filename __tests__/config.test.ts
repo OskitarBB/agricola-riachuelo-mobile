@@ -1,10 +1,10 @@
-// __tests__/config.test.ts — Coherencia de la configuración CFG-5 (maestro §17: un cambio que rompa una regla no se acepta).
+// __tests__/config.test.ts — Coherencia de la configuración CFG-6 (maestro §17: un cambio que rompa una regla no se acepta).
 
 import { checkConfigCoherence, CONFIG_VERSION, DEFAULT_CONFIG } from '../src/config/defaults';
 
 test('la configuración por defecto cumple todas las reglas de coherencia', () => {
   expect(checkConfigCoherence(DEFAULT_CONFIG)).toEqual([]);
-  expect(CONFIG_VERSION).toBe('CFG-5');
+  expect(CONFIG_VERSION).toBe('CFG-6');
 });
 
 test('detecta una espera de respuesta demasiado corta', () => {
@@ -40,4 +40,11 @@ test('Fase 4: una regla de subida rota se detecta', () => {
   bad.sync.uploadRequestTimeoutMs = bad.sync.ticketMinRemainingMs;
   bad.sync.batchSize = 500;
   expect(checkConfigCoherence(bad).length).toBe(2);
+});
+
+test('CFG-6: JPEG con compresión (0,6–0,95) para que una foto de 12 MP no se acerque a los 10 MB', () => {
+  expect(DEFAULT_CONFIG.capture.jpegQuality).toBeLessThan(1);
+  const bad = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  bad.capture.jpegQuality = 1;
+  expect(checkConfigCoherence(bad).some((e) => e.includes('jpegQuality'))).toBe(true);
 });
