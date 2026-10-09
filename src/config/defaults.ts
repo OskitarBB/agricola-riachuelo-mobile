@@ -1,4 +1,4 @@
-// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-8).
+// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-9).
 //
 // QUÉ HACE: concentra TODOS los umbrales, tiempos, puertos e intervalos (regla R-08 del maestro:
 // ningún número "suelto" en el código). Los servicios leen estos valores a través de src/config/index.ts.
@@ -46,9 +46,14 @@
 //    internet se vuelve a pedir la lista; locationIntervalMs (2 s) y arrivedRadiusM (15 m, calibrar: el GPS del
 //    celular tiene 5–15 m de error): debajo de esa distancia se muestra «Estás en el lugar».
 //
+// CAMBIOS CFG-8 → CFG-9 (limpieza de fotos, app 0.5.1, plataforma v1.3.1):
+//  - cleanup.*: NUEVO. checkIntervalMs (10 min): cada cuánto, como máximo, la sincronización pregunta a la plataforma
+//    qué fotos y sesiones borró el administrador (GET /mobile/deleted-captures); requestTimeoutMs (30 s); maxPages
+//    (5): páginas por consulta. La app borra el archivo de esas fotos y cierra su cola (la fila queda, RN-09).
+//
 // Los valores marcados "calibrar" son iniciales: se ajustan con mediciones y NO son resultados validados.
 
-export const CONFIG_VERSION = 'CFG-8';
+export const CONFIG_VERSION = 'CFG-9';
 
 export interface AppConfig {
   auth: {
@@ -191,6 +196,12 @@ export interface AppConfig {
     locationIntervalMs: number;
     arrivedRadiusM: number; // calibrar
   };
+  /** CFG-9 (app 0.5.1, plataforma v1.3.1): fotos y sesiones borradas por el administrador. */
+  cleanup: {
+    checkIntervalMs: number;
+    requestTimeoutMs: number;
+    maxPages: number;
+  };
   ui: {
     soundsEnabledByDefault: boolean;
     hapticsEnabledByDefault: boolean;
@@ -309,6 +320,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   retention: { cameraPolicy: 'TRAS_SINCRONIZACION', controllerPolicy: 'CONSERVAR' },
   logging: { eventLogMaxDays: 30 },
   pests: { windowDays: 30, requestTimeoutMs: 30_000, autoRefreshMs: 120_000, locationIntervalMs: 2_000, arrivedRadiusM: 15 },
+  cleanup: { checkIntervalMs: 600_000, requestTimeoutMs: 30_000, maxPages: 5 },
   ui: { soundsEnabledByDefault: true, hapticsEnabledByDefault: true, toastDurationMs: 2_800 },
   simulator: {
     connectDelayMs: 1_200,
@@ -365,5 +377,10 @@ export function checkConfigCoherence(cfg: AppConfig): string[] {
   if (pe.requestTimeoutMs >= pe.autoRefreshMs) errors.push('pests.requestTimeoutMs ≥ pests.autoRefreshMs');
   if (pe.locationIntervalMs < 500) errors.push('pests.locationIntervalMs < 0,5 s');
   if (!(pe.arrivedRadiusM >= 3 && pe.arrivedRadiusM <= 50)) errors.push('pests.arrivedRadiusM fuera de 3–50 m');
+  // CFG-9: limpieza ordenada por el administrador.
+  const cl = cfg.cleanup;
+  if (cl.checkIntervalMs < 60_000) errors.push('cleanup.checkIntervalMs < 1 min');
+  if (cl.requestTimeoutMs >= cl.checkIntervalMs) errors.push('cleanup.requestTimeoutMs ≥ cleanup.checkIntervalMs');
+  if (!(cl.maxPages >= 1 && cl.maxPages <= 20)) errors.push('cleanup.maxPages fuera de 1–20');
   return errors;
 }

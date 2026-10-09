@@ -24,9 +24,10 @@ import * as Network from 'expo-network';
 import { canDoFieldWork, MOBILE_ALLOWED_ROLES, type AccountStatus, type UserProfile, type UserRole } from '../../domain/types';
 import type { AuthApi } from '../authApi';
 import type { BootstrapApi } from '../bootstrapApi';
-import type { PestApi } from '../pestApi';
+import type { DeletionApi } from '../deletionApi';
 import type { ApiErrorCode, LoginResponse } from '../dto';
 import { ApiError, toCallResult, type ApiCallResult } from '../httpClient';
+import type { PestApi } from '../pestApi';
 import type { SyncApi } from '../syncApi';
 import type { UploadApi } from '../uploadApi';
 import { buildMockBootstrap } from './mockCatalog';
@@ -245,6 +246,15 @@ export const mockPestApi: PestApi = {
     await requireInternet();
     requireUser(accessToken);
     return buildMockPestReports(Math.max(1, Math.min(Math.round(days), 90)));
+  },
+};
+
+/** v0.5.1: el backend simulado nunca borra fotos (la limpieza la hace el administrador en la web real). */
+export const mockDeletionApi: DeletionApi = {
+  async list(accessToken, _deviceId, since) {
+    await requireInternet();
+    requireUser(accessToken);
+    return { captures: [], sessionIds: [], cursor: since, hasMore: false, serverTime: new Date().toISOString() };
   },
 };
 

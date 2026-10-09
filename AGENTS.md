@@ -19,7 +19,7 @@ Reglas del proyecto (resumen):
 - Sincronización: `src/sync/syncService.ts` (motor), `syncPlanner.ts` (orden y padres, puro), `syncPayloads.ts`
   (datos del contrato, puro), `captureUploader.ts` y `retry.ts` (copias exactas del maestro 15.7.3 y C.3).
 - Textos de UI solo en `src/ui/strings.ts` / `src/ui/messages.ts`. Funciones no implementadas muestran "Pendiente".
-- Parámetros solo en `src/config/defaults.ts` (hoy **CFG-8**) y coherentes con `checkConfigCoherence()`.
+- Parámetros solo en `src/config/defaults.ts` (hoy **CFG-9**) y coherentes con `checkConfigCoherence()`.
 - «Ubicar plaga» (ADR 0009): el especialista fitosanitario entra a la app SOLO para ver alertas; toda función de campo
   (elegir función, vincular, sincronizar) se decide con `canDoFieldWork()` (`src/domain/types.ts`). El mapa usa
   Leaflet EMBEBIDO (`src/pests/vendor/leaflet.ts`, sin CDN) y teselas de Esri; «Cómo llegar» abre Google Maps por URL.

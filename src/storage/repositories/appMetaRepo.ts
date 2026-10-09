@@ -8,6 +8,7 @@
 // sincronización: fecha, código y conteos; sin datos sensibles).
 // v0.5.0 (ADR 0009): pest_reports_json — última lista de «Ubicar plaga» (alertas con ubicación y capas del fundo) para
 // verla sin internet en el campo; se reemplaza en cada actualización (todos los usuarios de la app ven la misma lista).
+// v0.5.1: deleted_cursor — cursor de GET /mobile/deleted-captures (fotos y sesiones borradas por el administrador).
 
 import { getDb, type Db } from '../db';
 
@@ -27,7 +28,8 @@ export type MetaKey =
   | 'last_sync'
   | 'ui_sounds'
   | 'ui_haptics'
-  | 'pest_reports_json';
+  | 'pest_reports_json'
+  | 'deleted_cursor';
 
 export async function getMeta(key: MetaKey, db: Db = getDb()): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string | null }>('SELECT value FROM app_meta WHERE key = ?', [key]);

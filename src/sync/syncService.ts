@@ -33,6 +33,7 @@ import { getAccessToken, noteServerTime, refreshAccessToken, revoke, REVOKE_CODE
 import { useAppSession } from '../auth/authStore';
 import { CONFIG } from '../config';
 import { addMsIso, nowIso, nowMs } from '../domain/time';
+import { isDeletionCode } from '../domain/deletions';
 import { canDoFieldWork } from '../domain/types';
 import { getDeviceIdentity } from '../device/deviceIdentity';
 import { keepAwakeOff, keepAwakeOn } from '../device/keepAwake';
@@ -79,6 +80,7 @@ import {
   type SyncQueueItem,
 } from '../storage/repositories/syncQueueRepo';
 import { syncCapture, type CaptureSyncOutcome, type CaptureUploaderDeps } from './captureUploader';
+import { checkServerDeletions, purgeCaptures, purgeSession } from './deletionService';
 import { classifyCloudinaryError, classifySyncError, nextDelayMs } from './retry';
 import {
   buildCaptureMetadata,
@@ -113,7 +115,9 @@ type ItemOutcome =
   | { kind: 'REQUIERE_LOGIN'; code: string }
   | { kind: 'SINCRONIZAR_PADRE'; code: string }
   | { kind: 'REPETIR_SUBIDA'; code: string }
-  | { kind: 'DEFINITIVO'; code: string; detail?: string | null };
+  | { kind: 'DEFINITIVO'; code: string; detail?: string | null }
+  // v0.5.1: 410 SESSION_DELETED / CAPTURE_DELETED: el administrador lo borró; se borra la copia local y se cierra.
+  | { kind: 'ELIMINADO'; code: 'SESSION_DELETED' | 'CAPTURE_DELETED' };
 
 /** Códigos de cuenta que Django responde con 403 y que classifySyncError (Anexo C.3) no incluye: pausan la cola. */
 const ACCOUNT_CODES: readonly string[] = ['ACCOUNT_PENDING', 'ACCOUNT_REJECTED'];
@@ -137,6 +141,7 @@ export function outcomeFromApi(r: ApiFailure): ItemOutcome {
   // 2xx que no es JSON: un Wi-Fi con página de acceso o un proxy intermedio. No es culpa del dato.
   if (r.message === 'RESPUESTA_NO_JSON') return { kind: 'REINTENTAR', code: 'RESPUESTA_NO_JSON', network: true };
   const code = r.code ?? `HTTP_${r.status ?? 0}`;
+  if (isDeletionCode(r.code)) return { kind: 'ELIMINADO', code: r.code };
   if (r.status === 403 && r.code && ACCOUNT_CODES.includes(r.code)) return { kind: 'REQUIERE_LOGIN', code };
   switch (classifySyncError({ networkError: false, status: r.status, code: r.code })) {
     case 'REINTENTAR':
@@ -532,6 +537,14 @@ async function applyOutcome(it: SyncQueueItem, outcome: ItemOutcome, ctx: RunCon
       logEvent('WARN', 'SYNC', 'ITEM_RETRY', { ...ref, code: outcome.code, reupload: true }, it.sessionId);
       return { recompute: true };
     }
+    case 'ELIMINADO': {
+      ctx.consecutiveFailures = 0;
+      ctx.counters.done += 1;
+      const files =
+        outcome.code === 'SESSION_DELETED' ? await purgeSession(it.sessionId) : await purgeCaptures([it.entityId]);
+      logEvent('WARN', 'SYNC', 'ITEM_DELETED_ON_SERVER', { ...ref, code: outcome.code, files }, it.sessionId);
+      return { recompute: true };
+    }
     case 'DEFINITIVO': {
       ctx.consecutiveFailures = 0; // el servidor respondió: no es una caída
       ctx.counters.errors += 1;
@@ -637,6 +650,9 @@ async function doRun(trigger: SyncTrigger): Promise<SyncRunResult> {
   if (auth.mode !== 'ONLINE') return emptyResult(trigger, 'REAUTENTICACION_REQUERIDA', startedAt, pendingAtStart);
   // Una sola ronda a la vez: lo que haya quedado EN_CURSO es de una ronda interrumpida y vuelve a PENDIENTE.
   await releaseStuckItems();
+  // v0.5.1: primero se aplica lo que el administrador borró (como máximo cada cleanup.checkIntervalMs; sin internet
+  // no hace nada). Así no se intenta subir algo que ya no debe existir.
+  await checkServerDeletions().catch((err: unknown) => logError('sync.cleanup', err));
   if (pendingAtStart === 0) {
     const errors = await countSyncErrors();
     return { ...emptyResult(trigger, errors > 0 ? 'SINCRONIZACION_CON_ERRORES' : 'NADA_PENDIENTE', startedAt), ok: errors === 0 };

@@ -124,6 +124,8 @@ export const API_ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   UPLOAD_NOT_FOUND: 'El servidor no encontró la foto en la nube. Se volverá a subir.',
   UPLOAD_MISMATCH: 'La foto en la nube no coincide con la del celular. Requiere revisión.',
   NOT_FOUND: 'El servidor no tiene ese registro.',
+  SESSION_DELETED: 'El administrador eliminó esta sesión en la plataforma; se borró la copia del celular.',
+  CAPTURE_DELETED: 'El administrador eliminó esta foto en la plataforma; se borró la copia del celular.',
   INTERNAL_ERROR: 'El servidor tuvo un problema. Se volverá a intentar.',
 };
 

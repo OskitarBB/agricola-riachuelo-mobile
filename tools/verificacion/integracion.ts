@@ -622,6 +622,52 @@ async function main() {
     useAppSession.getState().set({ mode: 'ONLINE' });
   });
 
+  // ---------------------------------------------------------------- v0.5.1: limpieza ordenada por el administrador
+  const borrarEnServidor = (sid: string, captureIds: string[]) => {
+    // Como evidencias.limpieza.eliminar_sesion: anota la sesión y sus fotos (la app solo lee estas tablas).
+    const hex = (u: string) => u.replace(/-/g, '');
+    const ahora = new Date().toISOString().replace('T', ' ').replace('Z', '');
+    serverDb!.prepare('INSERT INTO deleted_sessions (session_id, deleted_at) VALUES (?, ?)').run(hex(sid), ahora);
+    for (const c of captureIds) {
+      serverDb!
+        .prepare(
+          "INSERT INTO deleted_captures (capture_id, session_id, cloudinary_public_id, reason, deleted_at, cloud_error) VALUES (?, ?, ?, 'SESION', ?, '')",
+        )
+        .run(hex(c), hex(sid), `riachuelo/dev/${sid}/x/${c}`, ahora);
+    }
+  };
+  const { checkServerDeletions } = await import(`${M}/sync/deletionService`);
+  const { fileExists } = await import(`${M}/storage/files`);
+
+  await step('limpieza: el administrador borra una sesión ya sincronizada → la app borra la foto local y guarda el cursor', async () => {
+    const sid = await miniSession(12);
+    await sync.runSync({ trigger: 'MANUAL' });
+    const hechos = await queueRepo.listSessionItems(sid);
+    assert.ok(hechos.every((i: { status: string }) => i.status === 'HECHO'), JSON.stringify(hechos));
+    const fotos = await captureRepo.listCapturesBySession(sid);
+    assert.ok(fotos.length > 0 && fotos.every((c: { filePath: string | null }) => fileExists(c.filePath)), 'fotos en el celular');
+    if (!serverDb) return console.log('      (omitido: borrar en el servidor requiere PLATAFORMA_DB)');
+    borrarEnServidor(sid, fotos.map((c: { captureId: string }) => c.captureId));
+    const archivos = await checkServerDeletions(true);
+    assert.equal(archivos, fotos.length);
+    for (const c of await captureRepo.listCapturesBySession(sid)) {
+      assert.ok(c.fileDeletedAt, 'file_deleted_at marcado');
+      assert.ok(!fileExists(c.filePath), 'archivo borrado');
+    }
+    assert.equal(await checkServerDeletions(true), 0, 'el cursor no repite lo ya borrado');
+  });
+
+  await step('limpieza: una sesión borrada en el servidor no se vuelve a subir (410 SESSION_DELETED → cola cerrada)', async () => {
+    const sid = await miniSession(13);
+    if (!serverDb) return console.log('      (omitido: requiere PLATAFORMA_DB)');
+    borrarEnServidor(sid, []);
+    await sync.runSync({ trigger: 'MANUAL' });
+    const items = await queueRepo.listSessionItems(sid);
+    assert.ok(items.length > 0 && items.every((i: { status: string }) => i.status === 'HECHO'), JSON.stringify(items));
+    assert.equal(server(`SELECT COUNT(*) AS n FROM monitoring_sessions WHERE session_id = '${sid.replace(/-/g, '')}'`)[0].n, 0);
+    for (const c of await captureRepo.listCapturesBySession(sid)) assert.ok(!fileExists(c.filePath), 'archivo borrado');
+  });
+
   await step('CP-33: celular revocado por el administrador → al sincronizar se borran tokens y verificador; datos intactos', async () => {
     const sid = await miniSession(11);
     const before = await queueRepo.listSessionItems(sid);

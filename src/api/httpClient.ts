@@ -88,6 +88,8 @@ const KNOWN_CODES: readonly ApiErrorCode[] = [
   'UPLOAD_SIGNATURE_INVALID',
   'UPLOAD_NOT_FOUND',
   'UPLOAD_MISMATCH',
+  'SESSION_DELETED', // v0.5.1: el administrador borró la sesión (410)
+  'CAPTURE_DELETED', // v0.5.1: el administrador borró la foto (410)
   'NOT_FOUND',
   'INTERNAL_ERROR',
 ];

@@ -4,7 +4,7 @@ import { checkConfigCoherence, CONFIG_VERSION, DEFAULT_CONFIG } from '../src/con
 
 test('la configuración por defecto cumple todas las reglas de coherencia', () => {
   expect(checkConfigCoherence(DEFAULT_CONFIG)).toEqual([]);
-  expect(CONFIG_VERSION).toBe('CFG-8');
+  expect(CONFIG_VERSION).toBe('CFG-9');
 });
 
 test('detecta una espera de respuesta demasiado corta', () => {
@@ -66,4 +66,17 @@ test('CFG-8: «Ubicar plaga» pide hasta 90 días y refresca sin pisar la espera
   bad.pests.windowDays = 30;
   bad.pests.autoRefreshMs = 10_000;
   expect(checkConfigCoherence(bad).length).toBeGreaterThan(0);
+});
+
+test('CFG-9: la limpieza consulta como máximo cada 10 min y sin pisar la espera de la petición', () => {
+  expect(DEFAULT_CONFIG.cleanup).toEqual({ checkIntervalMs: 600_000, requestTimeoutMs: 30_000, maxPages: 5 });
+  const bad = { ...DEFAULT_CONFIG, cleanup: { checkIntervalMs: 10_000, requestTimeoutMs: 30_000, maxPages: 0 } };
+  const errors = checkConfigCoherence(bad);
+  expect(errors).toEqual(
+    expect.arrayContaining([
+      'cleanup.checkIntervalMs < 1 min',
+      'cleanup.requestTimeoutMs ≥ cleanup.checkIntervalMs',
+      'cleanup.maxPages fuera de 1–20',
+    ]),
+  );
 });

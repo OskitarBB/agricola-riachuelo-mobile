@@ -7,8 +7,16 @@
 import { ENV } from '../config';
 import { realAuthApi, type AuthApi } from './authApi';
 import { realBootstrapApi, type BootstrapApi } from './bootstrapApi';
+import { realDeletionApi, type DeletionApi } from './deletionApi';
 import { uploadToCloudinary } from './cloudinaryUpload';
-import { mockAuthApi, mockBootstrapApi, mockPestApi, mockSyncApi, mockUploadApi } from './mock/mockBackend';
+import {
+  mockAuthApi,
+  mockBootstrapApi,
+  mockDeletionApi,
+  mockPestApi,
+  mockSyncApi,
+  mockUploadApi,
+} from './mock/mockBackend';
 import { mockUploadToCloudinary } from './mock/mockCloudinary';
 import { realPestApi, type PestApi } from './pestApi';
 import { realSyncApi, type SyncApi } from './syncApi';
@@ -20,6 +28,8 @@ export const syncApi: SyncApi = ENV.useMockApi ? mockSyncApi : realSyncApi;
 export const uploadApi: UploadApi = ENV.useMockApi ? mockUploadApi : realUploadApi;
 /** «Ubicar plaga» (ADR 0009): alertas con ubicación y capas del fundo. */
 export const pestApi: PestApi = ENV.useMockApi ? mockPestApi : realPestApi;
+/** v0.5.1: fotos y sesiones borradas por el administrador (limpieza); la app borra su copia local. */
+export const deletionApi: DeletionApi = ENV.useMockApi ? mockDeletionApi : realDeletionApi;
 /** Subida directa de una foto con el ticket (real: Cloudinary; simulado: en memoria). */
 export const cloudUpload: typeof uploadToCloudinary = ENV.useMockApi
   ? (ticket, fileUri) => mockUploadToCloudinary(ticket, fileUri)

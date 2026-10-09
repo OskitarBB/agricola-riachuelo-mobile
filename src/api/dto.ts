@@ -55,6 +55,8 @@ export type ApiErrorCode =
   | 'UPLOAD_NOT_FOUND' // v2.0: Django no encuentra en Cloudinary el recurso informado
   | 'UPLOAD_MISMATCH' // v2.0: el recurso de Cloudinary no coincide con la captura (bytes o public_id)
   | 'NOT_FOUND' // supuesto del servidor (W-04): GET /captures/{id} inexistente
+  | 'SESSION_DELETED' // v0.5.1 (plataforma v1.3.1): el administrador borró la sesión (410); se borra la copia local
+  | 'CAPTURE_DELETED' // v0.5.1: el administrador borró la foto (410); se borra la copia local
   | 'INTERNAL_ERROR';
 
 export interface ApiErrorBody {
@@ -357,3 +359,13 @@ export interface BatchResponse {
 // GET /mobile/pest-reports?days=N → PestReportsResponse. Los tipos viven en src/domain/pests.ts (los usa la lógica
 // pura de distancia y orden); aquí se re-exportan para que el contrato completo se lea en un solo archivo.
 export type { FarmLayers, FarmLot, FarmPoint, FarmRow, PestReport, PestReportsResponse } from '../domain/pests';
+
+// GET /mobile/deleted-captures?since=<cursor> → DeletedCapturesResponse (plataforma v1.3.1, limpieza de fotos).
+// Fotos y sesiones que el ADMINISTRADOR borró para siempre; la app borra su copia local y guarda `cursor`.
+export interface DeletedCapturesResponse {
+  captures: { captureId: string; sessionId: string }[];
+  sessionIds: string[];
+  cursor: string | null;
+  hasMore: boolean;
+  serverTime: string;
+}
