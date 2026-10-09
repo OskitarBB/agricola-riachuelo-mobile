@@ -112,13 +112,36 @@ async function main() {
     assert.equal(!p.ok && p.code, 'ACCOUNT_PENDING');
   });
 
-  await step('login rechazado: cuenta bloqueada, rol solo web y contraseña incorrecta', async () => {
+  await step('login rechazado: cuenta bloqueada, rol solo web (supervisor) y contraseña incorrecta', async () => {
     const b = await auth.login('bloqueado@demo.pe', 'Demo2026');
     assert.equal(!b.ok && b.code, 'ACCOUNT_BLOCKED');
-    const e = await auth.login('especialista@demo.pe', 'Demo2026');
+    const e = await auth.login('supervisor@demo.pe', 'Demo2026');
     assert.equal(!e.ok && e.code, 'ROLE_NOT_ALLOWED');
     const w = await auth.login(OPERADOR, 'mala-clave-1');
     assert.equal(!w.ok && w.code, 'INVALID_CREDENTIALS');
+  });
+
+  // v0.5.0 (ADR 0009, plataforma v1.3): el especialista entra a la app solo para «Ubicar plaga».
+  await step('ADR 0009: el especialista entra, ve las alertas con ubicación y no sincroniza', async () => {
+    const { refreshPests, loadPests } = await import(`${M}/pests/pestService`);
+    const { canDoFieldWork } = await import(`${M}/domain/types`);
+    const { runSync } = await import(`${M}/sync/syncService`);
+    const r = await auth.login('especialista@demo.pe', 'Demo2026');
+    assert.deepEqual(r, { ok: true, status: 'AUTENTICADO', mode: 'ONLINE' });
+    assert.equal(canDoFieldWork(useAppSession.getState().user?.roles), false);
+    const res = await refreshPests();
+    assert.ok(res.ok, JSON.stringify(res));
+    const data = res.ok ? res.cache.data : null;
+    assert.ok(data && Array.isArray(data.reports) && Array.isArray(data.farm.lots) && data.farm.center.length === 2);
+    const visibles = ['CONFIRMADO_POR_IA', 'CONFIRMADO_POR_ESPECIALISTA', 'POSIBLE_PLAGA', 'PENDIENTE_REVISION'];
+    assert.ok(data!.reports.every((x: { status: string }) => visibles.includes(x.status)));
+    assert.ok((await loadPests())?.data.reports.length === data!.reports.length); // copia para usar sin internet
+    // Sincronizar con su usuario: la app no lo intenta (la plataforma respondería 403 y se revocaría la sesión).
+    const s = await runSync({ trigger: 'MANUAL' });
+    assert.equal(s.code, 'ACCESO_DENEGADO');
+    assert.equal(useAppSession.getState().status, 'AUTENTICADO');
+    console.log(`      (alertas: ${data!.reports.length}; lotes con contorno: ${data!.farm.lots.filter((l: { geometry: unknown }) => l.geometry).length})`);
+    await auth.logout();
   });
 
   await step('login del operador con internet (tokens + verificador sin internet)', async () => {

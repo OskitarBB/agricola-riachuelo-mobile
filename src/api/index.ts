@@ -8,8 +8,9 @@ import { ENV } from '../config';
 import { realAuthApi, type AuthApi } from './authApi';
 import { realBootstrapApi, type BootstrapApi } from './bootstrapApi';
 import { uploadToCloudinary } from './cloudinaryUpload';
-import { mockAuthApi, mockBootstrapApi, mockSyncApi, mockUploadApi } from './mock/mockBackend';
+import { mockAuthApi, mockBootstrapApi, mockPestApi, mockSyncApi, mockUploadApi } from './mock/mockBackend';
 import { mockUploadToCloudinary } from './mock/mockCloudinary';
+import { realPestApi, type PestApi } from './pestApi';
 import { realSyncApi, type SyncApi } from './syncApi';
 import { realUploadApi, type UploadApi } from './uploadApi';
 
@@ -17,6 +18,8 @@ export const authApi: AuthApi = ENV.useMockApi ? mockAuthApi : realAuthApi;
 export const bootstrapApi: BootstrapApi = ENV.useMockApi ? mockBootstrapApi : realBootstrapApi;
 export const syncApi: SyncApi = ENV.useMockApi ? mockSyncApi : realSyncApi;
 export const uploadApi: UploadApi = ENV.useMockApi ? mockUploadApi : realUploadApi;
+/** «Ubicar plaga» (ADR 0009): alertas con ubicación y capas del fundo. */
+export const pestApi: PestApi = ENV.useMockApi ? mockPestApi : realPestApi;
 /** Subida directa de una foto con el ticket (real: Cloudinary; simulado: en memoria). */
 export const cloudUpload: typeof uploadToCloudinary = ENV.useMockApi
   ? (ticket, fileUri) => mockUploadToCloudinary(ticket, fileUri)

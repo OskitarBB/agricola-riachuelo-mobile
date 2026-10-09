@@ -1,7 +1,8 @@
 // app/index.tsx — PANT-01 Arranque y distribuidor de rutas (maestro §6.4).
 //
 // QUÉ HACE: muestra el logo animado con "Preparando…" mientras se migra la base de datos y se carga la
-// sesión. Luego redirige: sin sesión → login; contraseña temporal → cambio; sin función o recién iniciada
+// sesión. Luego redirige: sin sesión → login; contraseña temporal → cambio; especialista fitosanitario (sin rol de
+// campo) → «Ubicar plaga» (ADR 0009); sin función o recién iniciada
 // la sesión → función (PANT-08, ADR 0005); faltan permisos → permisos; controlador → panel; cámara → cámara en
 // sesión (si tiene contexto abierto) o escanear QR. Si la migración falla: mensaje y "Exportar diagnóstico".
 // Esta pantalla también es el "ancla" a la que vuelve Stack.Protected cuando cambia el estado de sesión.
@@ -13,6 +14,7 @@ import { Animated, StyleSheet, Text, View } from 'react-native';
 
 import { useAppSession } from '../src/auth/authStore';
 import { bootApp } from '../src/boot';
+import { canDoFieldWork } from '../src/domain/types';
 import { hasOpenMonitoringSession } from '../src/device/deviceRole';
 import { exportAndShareDiagnostics } from '../src/diagnostics/exportDiagnostics';
 import { AppButton } from '../src/ui/components/AppButton';
@@ -49,7 +51,8 @@ function Dots() {
 }
 
 export default function BootScreen() {
-  const { booted, bootError, status, deviceRole, permissionsOk, roleChoicePending } = useAppSession();
+  const { booted, bootError, status, deviceRole, permissionsOk, roleChoicePending, user } = useAppSession();
+  const field = canDoFieldWork(user?.roles);
   const [minDone, setMinDone] = useState(false);
   useEffect(() => {
     // La pantalla se monta al arrancar: basta con esperar el mínimo desde el montaje.
@@ -61,13 +64,15 @@ export default function BootScreen() {
     if (!booted || bootError || !minDone) return;
     if (status === 'SIN_SESION') return router.replace('/login');
     if (status === 'CAMBIO_CONTRASENA_REQUERIDO') return router.replace('/change-password');
+    // ADR 0009: el especialista entra solo a «Ubicar plaga» (no elige función ni monitorea).
+    if (!field) return router.replace('/pests');
     // ADR 0005: después de cada inicio de sesión se elige (o confirma) la función del celular.
     if (!deviceRole || roleChoicePending) return router.replace('/role');
     if (!permissionsOk) return router.replace('/permissions');
     if (deviceRole === 'CONTROLADOR') return router.replace('/controller');
     const open = await hasOpenMonitoringSession(deviceRole);
     router.replace(open ? '/camera/live' : '/camera');
-  }, [booted, bootError, minDone, status, deviceRole, permissionsOk, roleChoicePending]);
+  }, [booted, bootError, minDone, status, deviceRole, permissionsOk, roleChoicePending, field]);
 
   // Se vuelve a evaluar cada vez que esta pantalla recibe el foco (p. ej. tras cerrar sesión o cambiar función).
   useFocusEffect(

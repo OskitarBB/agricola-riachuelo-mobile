@@ -352,3 +352,8 @@ export interface BatchResponse {
   accepted: number;
   duplicates: number;
 }
+
+// ------------------------------------------------------------- «Ubicar plaga» (plataforma v1.3, ADR 0009)
+// GET /mobile/pest-reports?days=N → PestReportsResponse. Los tipos viven en src/domain/pests.ts (los usa la lógica
+// pura de distancia y orden); aquí se re-exportan para que el contrato completo se lea en un solo archivo.
+export type { FarmLayers, FarmLot, FarmPoint, FarmRow, PestReport, PestReportsResponse } from '../domain/pests';

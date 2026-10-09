@@ -10,7 +10,18 @@ import { isDbOpen } from '../storage/db';
 import { insertEvent, purgeEventsBefore, type LogLevel } from '../storage/repositories/eventLogRepo';
 import { purgeProcessedBefore } from '../storage/repositories/processedMessagesRepo';
 
-export type LogCategory = 'AUTH' | 'DEVICE' | 'CATALOG' | 'SESSION' | 'NET' | 'CAPTURE' | 'TRANSFER' | 'SYNC' | 'GPS' | 'ERROR';
+export type LogCategory =
+  | 'AUTH'
+  | 'DEVICE'
+  | 'CATALOG'
+  | 'SESSION'
+  | 'NET'
+  | 'CAPTURE'
+  | 'TRANSFER'
+  | 'SYNC'
+  | 'GPS'
+  | 'PESTS' // v0.5.0: «Ubicar plaga» (ADR 0009)
+  | 'ERROR';
 
 let currentDeviceId: string | null = null;
 let currentSessionId: string | null = null;

@@ -17,6 +17,7 @@ import { cameraAgent } from '../src/camera/cameraAgent';
 import { releaseControllerSyncedPhotos } from '../src/camera/retentionService';
 import { apiHostLabel, APP_VERSION, CONFIG, CONFIG_VERSION, ENV, isSecureApiUrl, PROTOCOL_VERSION_LABEL } from '../src/config';
 import { formatDateTime } from '../src/domain/time';
+import { canDoFieldWork } from '../src/domain/types';
 import { batteryPct } from '../src/device/batteryService';
 import { setHapticsEnabled, setSoundsEnabled } from '../src/device/preferences';
 import { freeSpace } from '../src/device/storageInfo';
@@ -38,6 +39,8 @@ export default function SettingsScreen() {
   const [space, setSpace] = useState<number | null>(null);
   const [prefs, setPrefs] = useState(getFeedbackPrefs());
   const isCamera = deviceRole === 'CAMERA_1' || deviceRole === 'CAMERA_2';
+  // ADR 0009: el especialista solo usa «Ubicar plaga»: sin función del celular, fotos ni liberar espacio.
+  const field = canDoFieldWork(user?.roles);
 
   useFocusEffect(
     useCallback(() => {
@@ -87,7 +90,7 @@ export default function SettingsScreen() {
         <InfoRow label={S.login.email} value={user?.email} />
         <InfoRow label={S.settings.access} value={mode === 'OFFLINE' ? S.offline : S.online} />
         <InfoRow label={S.settings.offlineUntil} value={formatDateTime(offlineValidUntil)} />
-        <InfoRow label={S.settings.role} value={deviceRole ? ROLE_LABEL[deviceRole] : null} />
+        {field ? <InfoRow label={S.settings.role} value={deviceRole ? ROLE_LABEL[deviceRole] : null} /> : null}
       </Card>
 
       <Card delay={110}>
@@ -98,9 +101,12 @@ export default function SettingsScreen() {
             disabled={!online || mode !== 'ONLINE'}
             onPress={() => router.push('/change-password')}
           />
-          <AppButton title={S.settings.changeRole} variant="secondary" onPress={changeRole} />
-          <AppButton title={S.settings.gallery} variant="secondary" onPress={() => router.push('/gallery')} />
-          {isCamera ? <AppButton title={S.settings.retryTransfers} variant="secondary" onPress={retryTransfers} /> : null}
+          <AppButton title={S.pests.entry} variant="secondary" onPress={() => router.navigate('/pests')} />
+          {field ? <AppButton title={S.settings.changeRole} variant="secondary" onPress={changeRole} /> : null}
+          {field ? <AppButton title={S.settings.gallery} variant="secondary" onPress={() => router.push('/gallery')} /> : null}
+          {field && isCamera ? (
+            <AppButton title={S.settings.retryTransfers} variant="secondary" onPress={retryTransfers} />
+          ) : null}
           <AppButton
             title={S.settings.exportDiagnostics}
             variant="secondary"
@@ -109,7 +115,7 @@ export default function SettingsScreen() {
               showToast(ok ? S.settings.exported : 'ERROR_INESPERADO', ok ? 'success' : 'error');
             }}
           />
-          <AppButton title={S.settings.freeSpaceAction} variant="secondary" onPress={freeUp} />
+          {field ? <AppButton title={S.settings.freeSpaceAction} variant="secondary" onPress={freeUp} /> : null}
         </View>
       </Card>
 

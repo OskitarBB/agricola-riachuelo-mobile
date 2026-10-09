@@ -1,10 +1,10 @@
-// __tests__/config.test.ts — Coherencia de la configuración CFG-7 (maestro §17: un cambio que rompa una regla no se acepta).
+// __tests__/config.test.ts — Coherencia de la configuración CFG-8 (maestro §17: un cambio que rompa una regla no se acepta).
 
 import { checkConfigCoherence, CONFIG_VERSION, DEFAULT_CONFIG } from '../src/config/defaults';
 
 test('la configuración por defecto cumple todas las reglas de coherencia', () => {
   expect(checkConfigCoherence(DEFAULT_CONFIG)).toEqual([]);
-  expect(CONFIG_VERSION).toBe('CFG-7');
+  expect(CONFIG_VERSION).toBe('CFG-8');
 });
 
 test('detecta una espera de respuesta demasiado corta', () => {
@@ -54,4 +54,16 @@ test('CFG-7: un solo umbral de batería (15 %) que solo avisa', () => {
   const bad = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   bad.device.lowBatteryAlertPct = 0;
   expect(checkConfigCoherence(bad).some((e) => e.includes('lowBatteryAlertPct'))).toBe(true);
+});
+
+test('CFG-8: «Ubicar plaga» pide hasta 90 días y refresca sin pisar la espera de la petición', () => {
+  const p = DEFAULT_CONFIG.pests;
+  expect(p.windowDays).toBe(30);
+  expect(p.requestTimeoutMs).toBeLessThan(p.autoRefreshMs);
+  const bad = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  bad.pests.windowDays = 120;
+  expect(checkConfigCoherence(bad)).toContain('pests.windowDays fuera de 1–90 (límite del servidor)');
+  bad.pests.windowDays = 30;
+  bad.pests.autoRefreshMs = 10_000;
+  expect(checkConfigCoherence(bad).length).toBeGreaterThan(0);
 });

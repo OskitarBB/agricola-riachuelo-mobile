@@ -12,7 +12,7 @@ import * as Crypto from 'expo-crypto';
 
 import { APP_VERSION, CONFIG, CONFIG_VERSION } from '../config';
 import { bytesToBase64Url } from '../domain/ids';
-import { MOBILE_ALLOWED_ROLES, type CameraRole, type MonitoringSession, type SessionDevice } from '../domain/types';
+import { FIELD_ROLES, type CameraRole, type MonitoringSession, type SessionDevice } from '../domain/types';
 import {
   PROTOCOL_VERSION,
   type CaptureContextConfig,
@@ -84,7 +84,8 @@ export function validatePairRequest(
     return { ok: false, reason: 'SESSION_CLOSED' };
   if (CONFIG.pairing.requireSameAppVersion && req.appVersion !== APP_VERSION)
     return { ok: false, reason: 'APP_VERSION_MISMATCH' };
-  if (!req.userRoles.some((r) => MOBILE_ALLOWED_ROLES.includes(r))) return { ok: false, reason: 'USER_NOT_ALLOWED' };
+  // v0.5.0: el especialista entra a la app solo para «Ubicar plaga»; no puede ser cámara (FIELD_ROLES).
+  if (!req.userRoles.some((r) => FIELD_ROLES.includes(r))) return { ok: false, reason: 'USER_NOT_ALLOWED' };
   const active = devices.filter((d) => !d.released);
   const mineSameRole = active.find((d) => d.deviceId === deviceId && d.role === req.requestedRole);
   if (mineSameRole) return { ok: true, role: req.requestedRole, reconnect: true };

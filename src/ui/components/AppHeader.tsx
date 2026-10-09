@@ -13,6 +13,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppSession } from '../../auth/authStore';
+import { canDoFieldWork } from '../../domain/types';
 import { feedback } from '../feedback';
 import { useLogout } from '../hooks/useLogout';
 import { ROLE_LABEL, S } from '../strings';
@@ -55,7 +56,8 @@ export function AppHeader({ title, back, main, showLogout, right }: Props) {
   const subtitle = [
     user?.fullName,
     mode === 'OFFLINE' ? S.offline : mode === 'ONLINE' ? S.online : null,
-    deviceRole ? ROLE_LABEL[deviceRole] : null,
+    // ADR 0009: el especialista no usa una función del celular (aunque el celular tenga una guardada).
+    deviceRole && canDoFieldWork(user?.roles) ? ROLE_LABEL[deviceRole] : null,
   ]
     .filter(Boolean)
     .join(' · ');

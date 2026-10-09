@@ -1,6 +1,6 @@
 // src/api/mock/mockBackend.ts — Backend SIMULADO con el mismo contrato que la plataforma Django (maestro §15.6).
 //
-// QUÉ HACE: implementa AuthApi, BootstrapApi, SyncApi y UploadApi en memoria, con latencia y tasa de fallos
+// QUÉ HACE: implementa AuthApi, BootstrapApi, SyncApi, UploadApi y PestApi en memoria, con latencia y tasa de fallos
 // configurables. Se activa con EXPO_PUBLIC_USE_MOCK_API=1 (o si no hay EXPO_PUBLIC_API_URL).
 //  - Si el celular no tiene internet (expo-network), responde como "sin red" → se prueba el login sin internet.
 //  - Cuentas de prueba (contraseña Demo2026 salvo indicación):
@@ -10,6 +10,7 @@
 //      bloqueado@demo.pe  BLOQUEADO
 //      temporal@demo.pe   / Temp2026 → obliga a cambiar la contraseña (mustChangePassword)
 //      supervisor@demo.pe SUPERVISOR → ROLE_NOT_ALLOWED
+//      especialista@demo.pe ESPECIALISTA_FITOSANITARIO → solo «Ubicar plaga» (sincronizar → ROLE_NOT_ALLOWED)
 //  - Los tokens simulados se autovalidan (llevan userId y vencimiento) para sobrevivir reinicios de la app.
 //  - Sincronización (v2.0): recuerda sesiones, pasadas y secuencias recibidas para responder SESSION_NOT_FOUND,
 //    PASS_NOT_FOUND o SEQUENCE_NOT_FOUND como el servidor real (la memoria se pierde al reiniciar la app: así se
@@ -20,14 +21,16 @@
 
 import * as Network from 'expo-network';
 
-import { MOBILE_ALLOWED_ROLES, type AccountStatus, type UserProfile, type UserRole } from '../../domain/types';
+import { canDoFieldWork, MOBILE_ALLOWED_ROLES, type AccountStatus, type UserProfile, type UserRole } from '../../domain/types';
 import type { AuthApi } from '../authApi';
 import type { BootstrapApi } from '../bootstrapApi';
+import type { PestApi } from '../pestApi';
 import type { ApiErrorCode, LoginResponse } from '../dto';
 import { ApiError, toCallResult, type ApiCallResult } from '../httpClient';
 import type { SyncApi } from '../syncApi';
 import type { UploadApi } from '../uploadApi';
 import { buildMockBootstrap } from './mockCatalog';
+import { buildMockPestReports } from './mockPests';
 
 interface MockUser {
   profile: UserProfile;
@@ -96,6 +99,14 @@ const users = new Map<string, MockUser>(
       true,
     ),
     user('5e6f7a8b-9c0d-4e1f-2a3b-4c5d6e7f8a9b', 'Supervisor Web', 'supervisor@demo.pe', ['SUPERVISOR'], 'ACTIVO', 'Demo2026'),
+    user(
+      '6f7a8b9c-0d1e-4f2a-3b4c-5d6e7f8a9b0c',
+      'Especialista Fitosanitario',
+      'especialista@demo.pe',
+      ['ESPECIALISTA_FITOSANITARIO'],
+      'ACTIVO',
+      'Demo2026',
+    ),
   ].map((u) => [u.profile.email, u]),
 );
 
@@ -168,6 +179,13 @@ function requireUser(token: string): MockUser {
   return u;
 }
 
+/** Monitoreo y sincronización: como api.permissions.FieldWork de la plataforma (el especialista no sincroniza). */
+function requireFieldUser(token: string): MockUser {
+  const u = requireUser(token);
+  if (!canDoFieldWork(u.profile.roles)) fail(403, 'ROLE_NOT_ALLOWED');
+  return u;
+}
+
 export const mockAuthApi: AuthApi = {
   async health() {
     await requireInternet();
@@ -222,6 +240,14 @@ export const mockBootstrapApi: BootstrapApi = {
   },
 };
 
+export const mockPestApi: PestApi = {
+  async list(accessToken, _deviceId, days) {
+    await requireInternet();
+    requireUser(accessToken);
+    return buildMockPestReports(Math.max(1, Math.min(Math.round(days), 90)));
+  },
+};
+
 async function maybeFail(): Promise<void> {
   await requireInternet();
   if (Math.random() < failureRate) fail(503, 'INTERNAL_ERROR');
@@ -244,7 +270,7 @@ function requireSession(sessionId: string): void {
 export const mockSyncApi: SyncApi = {
   upsertSession: (req, token) =>
     call(sessions.has(req.sessionId) ? 200 : 201, () => {
-      requireUser(token);
+      requireFieldUser(token);
       const prev = sessions.get(req.sessionId);
       const status = prev === 'CLOSED' ? 'CLOSED' : req.status; // una sesión CLOSED no se reabre
       sessions.set(req.sessionId, status);
@@ -252,14 +278,14 @@ export const mockSyncApi: SyncApi = {
     }),
   upsertPass: (sessionId, req, token) =>
     call(passes.has(req.passId) ? 200 : 201, () => {
-      requireUser(token);
+      requireFieldUser(token);
       requireSession(sessionId);
       passes.set(req.passId, { sessionId, lateral: req.lateralCode });
       return { passId: req.passId, status: req.status };
     }),
   sequenceBatch: (req, token) =>
     call(200, () => {
-      requireUser(token);
+      requireFieldUser(token);
       requireSession(req.sessionId);
       let accepted = 0;
       let duplicates = 0;
@@ -273,7 +299,7 @@ export const mockSyncApi: SyncApi = {
     }),
   incidentBatch: (req, token) =>
     call(200, () => {
-      requireUser(token);
+      requireFieldUser(token);
       requireSession(req.sessionId);
       let accepted = 0;
       let duplicates = 0;
@@ -298,7 +324,7 @@ function checkParents(sessionId: string, passId: string, sequenceId: string): vo
 export const mockUploadApi: UploadApi = {
   requestTicket: (req, token) =>
     call(200, () => {
-      requireUser(token);
+      requireFieldUser(token);
       checkParents(req.sessionId, req.passId, req.sequenceId);
       const prev = confirmed.get(req.captureId);
       const serverTime = new Date().toISOString();
@@ -331,7 +357,7 @@ export const mockUploadApi: UploadApi = {
     }),
   confirm: (req, token) =>
     call(confirmed.has(req.metadata.captureId) ? 200 : 201, () => {
-      requireUser(token);
+      requireFieldUser(token);
       const m = req.metadata;
       checkParents(m.sessionId, m.passId, m.sequenceId);
       const prev = confirmed.get(m.captureId);
@@ -349,7 +375,7 @@ export const mockUploadApi: UploadApi = {
     }),
   uploadMultipart: (_fileUri, meta, token) =>
     call(confirmed.has(meta.captureId) ? 200 : 201, () => {
-      requireUser(token);
+      requireFieldUser(token);
       checkParents(meta.sessionId, meta.passId, meta.sequenceId);
       const prev = confirmed.get(meta.captureId);
       if (prev && (prev.md5 !== meta.md5.toLowerCase() || prev.sizeBytes !== meta.sizeBytes)) fail(409, 'CAPTURE_CONFLICT');
@@ -359,7 +385,7 @@ export const mockUploadApi: UploadApi = {
     }),
   captureStatus: (captureId, token) =>
     call(200, () => {
-      requireUser(token);
+      requireFieldUser(token);
       const c = confirmed.get(captureId);
       if (!c) fail(404, 'NOT_FOUND');
       return {

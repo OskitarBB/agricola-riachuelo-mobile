@@ -33,6 +33,7 @@ import { getAccessToken, noteServerTime, refreshAccessToken, revoke, REVOKE_CODE
 import { useAppSession } from '../auth/authStore';
 import { CONFIG } from '../config';
 import { addMsIso, nowIso, nowMs } from '../domain/time';
+import { canDoFieldWork } from '../domain/types';
 import { getDeviceIdentity } from '../device/deviceIdentity';
 import { keepAwakeOff, keepAwakeOn } from '../device/keepAwake';
 import { currentNetworkType } from '../device/networkMonitor';
@@ -707,6 +708,10 @@ async function doRun(trigger: SyncTrigger): Promise<SyncRunResult> {
 export function runSync(opts: { trigger?: SyncTrigger } = {}): Promise<SyncRunResult> {
   const trigger = opts.trigger ?? 'MANUAL';
   if (running) return Promise.resolve(emptyResult(trigger, 'SINCRONIZACION_EN_CURSO', nowIso()));
+  // ADR 0009: con el usuario del especialista no se sincroniza (la plataforma responde 403 ROLE_NOT_ALLOWED y la app
+  // revocaría la sesión). Los datos del controlador quedan guardados hasta que entre el operador o el administrador.
+  if (!canDoFieldWork(useAppSession.getState().user?.roles))
+    return Promise.resolve(emptyResult(trigger, 'ACCESO_DENEGADO', nowIso()));
   stopPending = false;
   running = doRun(trigger)
     .catch((err: unknown) => {
@@ -763,6 +768,7 @@ export async function maybeAutoSync(reason: AutoSyncReason): Promise<void> {
     const s = useAppSession.getState();
     if (!s.booted || s.deviceRole !== 'CONTROLADOR' || s.status !== 'AUTENTICADO' || s.mode !== 'ONLINE') return;
     if (s.roleChoicePending) return;
+    if (!canDoFieldWork(s.user?.roles)) return; // ADR 0009: el especialista no sincroniza (la plataforma respondería 403)
     if (await getCurrentSession(false)) return; // sesión de monitoreo abierta: no se compite con el trabajo de campo
     if (!(await hasDueItems(nowIso()))) return;
     if (CONFIG.sync.autoSyncWifiOnly && (await currentNetworkType()) !== 'WIFI') return;

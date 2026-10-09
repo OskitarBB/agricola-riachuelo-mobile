@@ -6,6 +6,8 @@
 // Fase 4: quality_profile_json (perfil publicado en el bootstrap, se reaplica al arrancar), server_clock_offset_ms
 // (hora del servidor − hora del celular, para medir vencimientos de tokens) y last_sync (resultado de la última
 // sincronización: fecha, código y conteos; sin datos sensibles).
+// v0.5.0 (ADR 0009): pest_reports_json — última lista de «Ubicar plaga» (alertas con ubicación y capas del fundo) para
+// verla sin internet en el campo; se reemplaza en cada actualización (todos los usuarios de la app ven la misma lista).
 
 import { getDb, type Db } from '../db';
 
@@ -24,7 +26,8 @@ export type MetaKey =
   | 'server_clock_offset_ms'
   | 'last_sync'
   | 'ui_sounds'
-  | 'ui_haptics';
+  | 'ui_haptics'
+  | 'pest_reports_json';
 
 export async function getMeta(key: MetaKey, db: Db = getDb()): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string | null }>('SELECT value FROM app_meta WHERE key = ?', [key]);

@@ -5,9 +5,10 @@
 //  - Define el Stack y las GUARDAS con Stack.Protected:
 //      (auth)/*          solo SIN sesión de usuario
 //      change-password   con sesión (única ruta en CAMBIO_CONTRASENA_REQUERIDO)
-//      (setup)/*, settings, gallery   solo AUTENTICADO
-//      controller/*      AUTENTICADO + función CONTROLADOR
-//      camera/*          AUTENTICADO + función de cámara
+//      settings, pests/*  solo AUTENTICADO (pests = «Ubicar plaga», ADR 0009: operador, administrador y especialista)
+//      (setup)/*, gallery AUTENTICADO + rol de campo (el especialista no elige función ni monitorea)
+//      controller/*      AUTENTICADO + rol de campo + función CONTROLADOR
+//      camera/*          AUTENTICADO + rol de campo + función de cámara
 //  - Monta los avisos globales (toast) y el diálogo de confirmación.
 
 import { Stack } from 'expo-router';
@@ -18,6 +19,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useAppSession } from '../src/auth/authStore';
 import { bootApp } from '../src/boot';
+import { canDoFieldWork } from '../src/domain/types';
 import { ConfirmHost } from '../src/ui/components/ConfirmDialog';
 import { ToastHost } from '../src/ui/components/ToastHost';
 import { colors } from '../src/ui/theme';
@@ -25,7 +27,7 @@ import { colors } from '../src/ui/theme';
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function RootLayout() {
-  const { booted, status, deviceRole } = useAppSession();
+  const { booted, status, deviceRole, user } = useAppSession();
 
   useEffect(() => {
     void bootApp();
@@ -37,8 +39,9 @@ export default function RootLayout() {
   const signedOut = booted && status === 'SIN_SESION';
   const mustChange = booted && status === 'CAMBIO_CONTRASENA_REQUERIDO';
   const authed = booted && status === 'AUTENTICADO';
-  const isController = authed && deviceRole === 'CONTROLADOR';
-  const isCamera = authed && (deviceRole === 'CAMERA_1' || deviceRole === 'CAMERA_2');
+  const fieldUser = authed && canDoFieldWork(user?.roles);
+  const isController = fieldUser && deviceRole === 'CONTROLADOR';
+  const isCamera = fieldUser && (deviceRole === 'CAMERA_1' || deviceRole === 'CAMERA_2');
 
   return (
     <SafeAreaProvider>
@@ -58,8 +61,11 @@ export default function RootLayout() {
           <Stack.Screen name="change-password" />
         </Stack.Protected>
         <Stack.Protected guard={authed}>
-          <Stack.Screen name="(setup)" />
           <Stack.Screen name="settings" />
+          <Stack.Screen name="pests" />
+        </Stack.Protected>
+        <Stack.Protected guard={fieldUser}>
+          <Stack.Screen name="(setup)" />
           <Stack.Screen name="gallery" />
         </Stack.Protected>
         <Stack.Protected guard={isController}>

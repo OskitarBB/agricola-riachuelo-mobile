@@ -176,6 +176,7 @@ export default function ControllerPanel() {
             style={styles.cell}
             onPress={() => router.push('/gallery')}
           />
+          <AppButton title={S.pests.entry} variant="dark" style={styles.cell} onPress={() => router.push('/pests')} />
         </View>
       </Card>
     </Screen>

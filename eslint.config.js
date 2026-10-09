@@ -7,6 +7,7 @@ module.exports = defineConfig([
   expoConfig,
   {
     // tools/verificacion: pruebas de contrato que corren en Node (npx tsx), fuera del bundle de la app.
-    ignores: ['dist/*', 'node_modules/*', '.expo/*', 'tools/**'],
+    // src/pests/vendor: copia generada de Leaflet 1.9.4 como texto (ADR 0009), no es código de la app.
+    ignores: ['dist/*', 'node_modules/*', '.expo/*', 'tools/**', 'src/pests/vendor/**'],
   },
 ]);

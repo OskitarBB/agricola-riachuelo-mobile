@@ -16,8 +16,18 @@ export type UUID = string;
 
 // ---------------------------------------------------------------- usuarios y cuentas
 export type UserRole = 'ADMINISTRADOR' | 'OPERADOR_CAMPO' | 'ESPECIALISTA_FITOSANITARIO' | 'SUPERVISOR';
-/** Roles de usuario que pueden usar la app móvil (los demás solo usan la web). */
-export const MOBILE_ALLOWED_ROLES: readonly UserRole[] = ['OPERADOR_CAMPO', 'ADMINISTRADOR'];
+/**
+ * Roles de usuario que pueden ENTRAR a la app móvil (los demás solo usan la web). v0.5.0 (ADR 0009): el especialista
+ * fitosanitario entra solo a «Ubicar plaga»; el monitoreo y la sincronización siguen siendo de FIELD_ROLES.
+ */
+export const MOBILE_ALLOWED_ROLES: readonly UserRole[] = ['OPERADOR_CAMPO', 'ADMINISTRADOR', 'ESPECIALISTA_FITOSANITARIO'];
+/** Roles que hacen trabajo de campo: función del celular (controlador/cámara), monitoreo y sincronización. */
+export const FIELD_ROLES: readonly UserRole[] = ['OPERADOR_CAMPO', 'ADMINISTRADOR'];
+
+/** ¿El usuario puede monitorear (elegir función, emitir y sincronizar)? El especialista solo ve «Ubicar plaga». */
+export function canDoFieldWork(roles: readonly string[] | null | undefined): boolean {
+  return !!roles && roles.some((r) => (FIELD_ROLES as readonly string[]).includes(r));
+}
 export type AccountStatus = 'PENDIENTE_APROBACION' | 'ACTIVO' | 'RECHAZADO' | 'BLOQUEADO';
 
 export interface UserProfile {

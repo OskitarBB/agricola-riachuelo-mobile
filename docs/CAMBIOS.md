@@ -1,3 +1,42 @@
+# Informe de avance — App móvil v0.5.0 (formato maestro §23.2)
+
+**Tarea:** «Ubicar plaga» y especialista en la app. **Fecha:** 2026-10-08 · **CFG-8** · esquema SQLite 4 (sin migración).
+Requiere la plataforma web **v1.3** (ADR-W-007). Decisión: `docs/adr/0009-ubicar-plaga.md`.
+
+## Hecho
+- **PANT-40 Ubicar plaga:** mapa satelital (Esri) o lista con las alertas confirmadas por la IA o por el especialista,
+  posibles plagas y en revisión; contornos de lotes, hileras y puntos dibujados en la web; tu posición; distancia y
+  dirección; filtros; copia guardada para usar sin internet; actualización automática cada 2 min con internet.
+- **PANT-41 Detalle:** miniatura, indicio de la IA, lugar (lote, hilera, lado, plantas, marcador), fuente y precisión de
+  la ubicación, observación del especialista, **«Cómo llegar (Google Maps)»** a pie y «Ver en el mapa».
+- Leaflet 1.9.4 **embebido** (sin CDN) en un WebView (`react-native-webview` 13.16.1).
+- **Especialista fitosanitario** entra a la app solo para «Ubicar plaga»: no elige función, no se vincula como cámara
+  y no sincroniza (`canDoFieldWork`). Cuenta simulada `especialista@demo.pe`.
+- Entradas: Controlador, Ajustes y PANT-08. CFG-8 (`pests.*`). Versión 0.5.0 (Android versionCode 10, iOS build 10).
+
+## Archivos
+Nuevos: `app/pests/{_layout,index,[id]}.tsx`, `src/pests/{pestService,mapHtml,openMaps}.ts`,
+`src/pests/vendor/leaflet.ts`, `src/domain/{geo,pests}.ts`, `src/api/pestApi.ts`, `src/api/mock/mockPests.ts`,
+`src/ui/components/{PestMap,PestItem}.tsx`, `__tests__/pests.test.ts`, `docs/adr/0009-ubicar-plaga.md`.
+Modificados: `app/{_layout,index,settings}.tsx`, `app/(setup)/role.tsx`, `app/controller/index.tsx`,
+`src/domain/types.ts`, `src/api/{dto,index}.ts`, `src/api/mock/mockBackend.ts`, `src/config/defaults.ts`,
+`src/controller/pairingService.ts`, `src/sync/syncService.ts`, `src/diagnostics/eventLog.ts`,
+`src/storage/repositories/appMetaRepo.ts`, `src/ui/{strings,messages}.ts`, `src/ui/components/AppHeader.tsx`,
+`__tests__/config.test.ts`, `eslint.config.js`, `tools/verificacion/{integracion.ts,tsconfig.json,README.md}`,
+`tools/verificacion/mocks/expo-location.ts` (nuevo), `app.json`, `package.json`, `package-lock.json`, `README.md`, `AGENTS.md`.
+
+## Resultado
+`tsc`: 0 errores · `expo lint`: 0 · Jest **16 suites / 139 pruebas OK** (15 nuevas). `expo export` Android OK
+(Hermes 5,3 MB). Simulado 9/9. Integración con la plataforma v1.3 local **30/30** (paso nuevo: el especialista entra,
+recibe las alertas y la app no sincroniza con su usuario; la plataforma le responde 403 en `/sessions`). Página del mapa probada en Chromium sin internet: dibuja lotes, hileras, puntos, alertas y posición,
+y responde a tocar una alerta, «Todo», «Yo» y Satélite/Calles sin errores.
+
+## Pendiente
+- Probar en campo con el APK 0.5.0 en los tres celulares: «Cómo llegar» con Google Maps y la precisión del GPS
+  (calibrar `pests.arrivedRadiusM`).
+
+---
+
 # Informe de avance — App móvil v0.4.6 (formato maestro §23.2)
 
 **Tarea:** batería: un solo aviso. **Fecha:** 2026-10-07 · **CFG-7** · esquema SQLite 4.

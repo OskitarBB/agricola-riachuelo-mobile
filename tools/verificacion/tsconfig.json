@@ -20,6 +20,7 @@
       "expo-application": ["./mocks/expo-application.ts"],
       "expo-device": ["./mocks/expo-device.ts"],
       "expo-file-system": ["./mocks/expo-file-system.ts"],
+      "expo-location": ["./mocks/expo-location.ts"],
       "react-native": ["./mocks/react-native.ts"]
     }
   },

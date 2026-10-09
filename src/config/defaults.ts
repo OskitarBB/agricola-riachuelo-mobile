@@ -1,4 +1,4 @@
-// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-7).
+// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-8).
 //
 // QUÉ HACE: concentra TODOS los umbrales, tiempos, puertos e intervalos (regla R-08 del maestro:
 // ningún número "suelto" en el código). Los servicios leen estos valores a través de src/config/index.ts.
@@ -40,9 +40,15 @@
 //    15 % solo aparece «Batería baja: conecta el power bank» (controlador, en su pantalla, y cámara, en PANT-30/31).
 //    Las fotos y datos están en SQLite: si un celular se apaga, se recuperan al encenderlo (8.10).
 //
+// CAMBIOS CFG-7 → CFG-8 («Ubicar plaga», ADR 0009, app 0.5.0):
+//  - pests.*: NUEVO. windowDays (30): días hacia atrás de alertas que se piden a la plataforma (máximo 90, lo
+//    limita también el servidor); requestTimeoutMs (30 s); autoRefreshMs (2 min): con la pantalla abierta y
+//    internet se vuelve a pedir la lista; locationIntervalMs (2 s) y arrivedRadiusM (15 m, calibrar: el GPS del
+//    celular tiene 5–15 m de error): debajo de esa distancia se muestra «Estás en el lugar».
+//
 // Los valores marcados "calibrar" son iniciales: se ajustan con mediciones y NO son resultados validados.
 
-export const CONFIG_VERSION = 'CFG-7';
+export const CONFIG_VERSION = 'CFG-8';
 
 export interface AppConfig {
   auth: {
@@ -177,6 +183,14 @@ export interface AppConfig {
   logging: {
     eventLogMaxDays: number;
   };
+  /** CFG-8 (ADR 0009): «Ubicar plaga». */
+  pests: {
+    windowDays: number;
+    requestTimeoutMs: number;
+    autoRefreshMs: number;
+    locationIntervalMs: number;
+    arrivedRadiusM: number; // calibrar
+  };
   ui: {
     soundsEnabledByDefault: boolean;
     hapticsEnabledByDefault: boolean;
@@ -294,6 +308,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
   retention: { cameraPolicy: 'TRAS_SINCRONIZACION', controllerPolicy: 'CONSERVAR' },
   logging: { eventLogMaxDays: 30 },
+  pests: { windowDays: 30, requestTimeoutMs: 30_000, autoRefreshMs: 120_000, locationIntervalMs: 2_000, arrivedRadiusM: 15 },
   ui: { soundsEnabledByDefault: true, hapticsEnabledByDefault: true, toastDurationMs: 2_800 },
   simulator: {
     connectDelayMs: 1_200,
@@ -343,5 +358,12 @@ export function checkConfigCoherence(cfg: AppConfig): string[] {
   if (s.retryDelaysMs.length === 0) errors.push('retryDelaysMs vacío');
   if (s.autoSyncIntervalMs < 60_000) errors.push('autoSyncIntervalMs < 1 min');
   if (s.maxConsecutiveFailures < 1) errors.push('maxConsecutiveFailures < 1');
+  // CFG-8: «Ubicar plaga».
+  const pe = cfg.pests;
+  if (!(pe.windowDays >= 1 && pe.windowDays <= 90)) errors.push('pests.windowDays fuera de 1–90 (límite del servidor)');
+  if (pe.autoRefreshMs < 30_000) errors.push('pests.autoRefreshMs < 30 s');
+  if (pe.requestTimeoutMs >= pe.autoRefreshMs) errors.push('pests.requestTimeoutMs ≥ pests.autoRefreshMs');
+  if (pe.locationIntervalMs < 500) errors.push('pests.locationIntervalMs < 0,5 s');
+  if (!(pe.arrivedRadiusM >= 3 && pe.arrivedRadiusM <= 50)) errors.push('pests.arrivedRadiusM fuera de 3–50 m');
   return errors;
 }

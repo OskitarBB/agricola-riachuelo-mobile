@@ -11,6 +11,7 @@
 //    anterior (no se borra ningún dato), se guarda app_meta.device_role y se pasa a PANT-07 o directo a la pantalla principal:
 //    Controlador → PANT-10; Cámara 1/2 → PANT-30 (vincular por QR) o PANT-31 si ya está unida a una sesión.
 // Recién iniciada la sesión no hay "Volver": la cabecera ofrece "Cerrar sesión" en la misma zona (§25.3).
+// v0.5.0 (ADR 0009): botón «Ubicar plaga» para ir a ver las alertas sin elegir antes una función.
 
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -197,6 +198,9 @@ export default function RoleScreen() {
           onPress={() => onCardPress(r)}
         />
       ))}
+      <FadeIn delay={360}>
+        <AppButton title={S.pests.entry} variant="dark" onPress={() => router.push('/pests')} style={styles.pests} />
+      </FadeIn>
       <Card title={S.role.deviceData} delay={380}>
         <InfoRow label={S.role.model} value={identity?.model} />
         <InfoRow
@@ -247,4 +251,5 @@ const styles = StyleSheet.create({
   },
   radioOn: { backgroundColor: colors.goldLight, borderColor: colors.goldLight },
   radioMark: { fontSize: 18, fontWeight: font.weightBold, color: colors.brandDeep },
+  pests: { marginBottom: 14 },
 });

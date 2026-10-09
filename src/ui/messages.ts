@@ -95,7 +95,12 @@ export type AppErrorCode =
   | 'RED'
   // Fase 4: cuenta y contraseña con la plataforma Django
   | 'CONTRASENA_ACTUAL_INCORRECTA'
-  | 'CONEXION_OK';
+  | 'CONEXION_OK'
+  // v0.5.0 «Ubicar plaga» (ADR 0009)
+  | 'UBICACION_SIN_PERMISO'
+  | 'MAPS_NO_DISPONIBLE'
+  | 'ALERTAS_ACTUALIZADAS'
+  | 'ALERTAS_DE_COPIA';
 
 export const API_ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   VALIDATION_ERROR: 'Revisa los datos marcados e inténtalo de nuevo.',
@@ -229,6 +234,10 @@ export const APP_ERROR_MESSAGES: Record<AppErrorCode, string> = {
   RED: 'Se cortó la conexión durante el envío. Se volverá a intentar.',
   CONTRASENA_ACTUAL_INCORRECTA: 'La contraseña actual no es correcta.',
   CONEXION_OK: 'El servidor responde correctamente.',
+  UBICACION_SIN_PERMISO: 'Activa el permiso de ubicación para ver a qué distancia está cada alerta.',
+  MAPS_NO_DISPONIBLE: 'No se pudo abrir Google Maps. Usa el mapa de la app y la dirección indicada.',
+  ALERTAS_ACTUALIZADAS: 'Alertas actualizadas.',
+  ALERTAS_DE_COPIA: 'Sin conexión: se muestran las últimas alertas descargadas.',
 };
 
 /** Códigos de classifyCloudinaryError (src/sync/retry.ts) que solo piden reintentar más tarde. */

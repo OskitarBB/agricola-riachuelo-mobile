@@ -1,4 +1,4 @@
-# Riachuelo Monitoreo — App móvil (Fases 0 a 4 · v0.4.6)
+# Riachuelo Monitoreo — App móvil (Fases 0 a 4 · v0.5.0)
 
 App móvil del sistema de monitoreo fitosanitario de vid de **Agrícola Riachuelo** (Curso Integrador II).
 Un celular **controlador** dirige a dos celulares **cámara** que toman fotos sincronizadas de los dos laterales
@@ -11,6 +11,7 @@ de la hilera. Construida con **Expo SDK 57**, Expo Router, TypeScript estricto y
 | 2 | Vinculación por QR, protocolo local v1 (WebSocket + HTTP), prueba corta, simulador con 2 cámaras virtuales | ✅ |
 | 3 | Sesión, pasadas, marcadores, captura MANUAL/AUTOMÁTICO, calidad técnica, repetición, cierre y resumen | ✅ |
 | 4 | Sincronización con la plataforma Django (`/api/v1`): sesiones, pasadas, secuencias, incidencias y fotos por ticket directo a Cloudinary; reintentos, fotos tardías, sincronización automática con Wi-Fi | ✅ v0.4.0 |
+| — | **Ubicar plaga**: mapa satelital con las alertas confirmadas por la IA o el especialista y las posibles plagas, distancia y dirección desde tu posición, «Cómo llegar» con Google Maps; el especialista fitosanitario también entra (ADR 0009) | ✅ v0.5.0 |
 | 5 | Validación en iPhone (las tres funciones) | ⏳ Siguiente |
 | 6 | Campo y versión del piloto (3 Android) | ⏳ |
 
@@ -48,6 +49,7 @@ npm start            # = expo start --go -c  → muestra el QR para Expo Go
 | `operador@demo.pe` | `Demo2026` | Operador de campo (flujo normal) |
 | `supervisor@demo.pe` | `Demo2026` | Supervisor |
 | `admin@demo.pe` | `Demo2026` | Administrador |
+| `especialista@demo.pe` | `Demo2026` | Especialista fitosanitario: entra directo a «Ubicar plaga» |
 | `temporal@demo.pe` | `Temp2026` | Obliga a cambiar la contraseña |
 | `pendiente@demo.pe` | cualquiera | Cuenta pendiente de aprobación |
 | `bloqueado@demo.pe` | cualquiera | Cuenta bloqueada |
@@ -161,7 +163,7 @@ Cada archivo empieza con un comentario **QUÉ HACE** y, cuando aplica, qué part
 npm run build:apk:piloto     # perfil "piloto": https://monitoreo.agricolariachuelo.org, sin backend simulado
 ```
 
-- Los **tres** celulares deben tener la **misma versión** (hoy 0.4.6): en `piloto` la vinculación lo exige (RN-17).
+- Los **tres** celulares deben tener la **misma versión** (hoy 0.5.0): en `piloto` la vinculación lo exige (RN-17).
 - Las cuentas de los operadores se crean desde la app (*Crear cuenta*) y el administrador las aprueba en la web con
   el rol «Operador de campo». El administrador también puede usar la app.
 - Primer uso del controlador: *Catálogos › Actualizar* (con internet) para bajar lotes, hileras y marcadores reales.
@@ -200,8 +202,22 @@ La app no necesita cambios para la IA: su trabajo termina cuando Django confirma
 la tarea de análisis en la misma transacción (solo fotos UTILIZABLE o PENDIENTE_REVISION_TECNICA) y el *worker* de la
 plataforma la procesa. Mientras no haya un modelo activo, las fotos quedan esperando; al activar el modelo entrenado
 en el servidor (`deploy/modelos/modelo.onnx` + configuración activa en `/gestion/`), el worker encola y analiza todas
-las fotos pendientes, incluidas las ya sincronizadas. Los resultados se revisan en la web: la API nunca devuelve
-resultados de IA ni URLs de fotos a la app (maestro §28.10).
+las fotos pendientes, incluidas las ya sincronizadas. Los resultados se revisan en la web. Desde la v0.5.0 la app
+recibe, solo en «Ubicar plaga», los casos que el encargado debe ir a ver (con la clase sugerida y una miniatura firmada
+por Django); la sincronización sigue sin recibir resultados de IA (maestro §28.10, ADR 0009).
+
+### Ubicar plaga (v0.5.0, ADR 0009)
+
+- **Dónde:** Controlador › *🐞 Ubicar plaga*, Ajustes › *Ubicar plaga* o desde la pantalla de elegir función. El
+  especialista fitosanitario entra directo (no elige función ni monitorea; la plataforma le niega la sincronización).
+- **Qué muestra** (`GET /api/v1/mobile/pest-reports`, plataforma v1.3): confirmadas por la IA ⚡, confirmadas por el
+  especialista, posibles plagas y casos en revisión de los últimos 30 días. Los descartes no salen.
+- **Mapa satelital** (Esri World Imagery) con contornos de lotes, hileras y puntos del fundo dibujados en la web
+  (*Mapa del fundo*), las alertas con el color de su estado y tu posición. Leaflet va **dentro de la app**: sin datos
+  móviles se ven igual los contornos, las alertas y tu posición (solo falta la imagen).
+- **Cómo llegar:** distancia y dirección («35 m al noreste ↗») y el botón *Cómo llegar (Google Maps)* abre la ruta a
+  pie. Con ubicación «aproximada» (marcador de la hilera) o sin coordenadas, busca por lote, hilera y plantas.
+- La última lista se guarda en el celular para verla sin internet; se actualiza sola cada 2 minutos con internet.
 
 ## 8. Limitaciones conocidas
 
