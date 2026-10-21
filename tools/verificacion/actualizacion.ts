@@ -1,8 +1,9 @@
 // tools/verificacion/actualizacion.ts — Un celular con la v0.2/v0.3 (solo migración 001 y datos) abre la v0.4.0.
 //
 // QUÉ HACE: arma una base con la migración 001, catálogos, una sesión y su cola; luego abre la base con el código real
-// (src/storage/db.ts → migraciones 002, 003 y 004) y comprueba que los datos se conservan, que los códigos de
-// catálogo ya pueden repetirse entre hileras, las tablas nuevas, las claves foráneas y la integridad.
+// (src/storage/db.ts → migraciones 002, 003, 004 y 005) y comprueba que los datos se conservan, que los códigos de
+// catálogo ya pueden repetirse entre hileras, las tablas nuevas, el largo de la hilera (v0.6.0), las claves
+// foráneas y la integridad.
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -41,7 +42,10 @@ async function main() {
   await openAppDb();
   const db = getDb();
   const v = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version', []);
-  assert.equal(v?.user_version, 4);
+  assert.equal(v?.user_version, 5);
+  // v0.6.0 (migración 005): la hilera antigua queda sin largo y se puede guardar el largo en metros.
+  assert.equal((await db.getFirstAsync<{ length_m: number | null }>("SELECT length_m FROM cat_rows WHERE id = 'L1-H1'", []))?.length_m, null);
+  await db.runAsync("UPDATE cat_rows SET length_m = 200 WHERE id = 'L1-H1'", []);
   assert.equal((await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) n FROM cat_segments', []))?.n, 1);
   assert.equal((await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) n FROM cat_markers', []))?.n, 1);
   assert.equal((await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) n FROM monitoring_sessions', []))?.n, 1);
@@ -58,7 +62,7 @@ async function main() {
   assert.equal(fk.length, 0, JSON.stringify(fk));
   const integrity = await db.getFirstAsync<{ integrity_check: string }>('PRAGMA integrity_check', []);
   assert.equal(integrity?.integrity_check, 'ok');
-  console.log('✓ Actualización 001 → 004: datos conservados, códigos repetidos permitidos, claves foráneas e integridad OK');
+  console.log('✓ Actualización 001 → 005: datos conservados, códigos repetidos permitidos, largo de hilera, claves foráneas e integridad OK');
 }
 main().catch((e) => {
   console.error('✗', e);

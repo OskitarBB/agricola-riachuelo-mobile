@@ -198,6 +198,12 @@ export const S = {
     rows: 'Hileras',
     segments: 'Segmentos',
     markers: 'Marcadores',
+    // v0.6.0 (ADR 0011)
+    perRow: 'Segmentos por hilera',
+    offStandard: 'Hileras con otra cantidad',
+    offStandardWarn: (n: number, perRow: number) =>
+      `${n} hilera(s) no tienen sus ${perRow} segmentos. Se pueden usar, pero la ubicación de las fotos será menos ` +
+      `precisa. En la web: Catálogos → lote → «Aplicar ${perRow} segmentos».`,
     update: 'Actualizar',
     updated: 'Catálogos actualizados.',
     never: 'Sin descargar',
@@ -262,6 +268,17 @@ export const S = {
     pairing: 'Vincular cámaras',
     choose: 'Elegir',
     plants: (n: number) => `${n} plantas`,
+    // v0.6.0 (ADR 0011): segmentos fijos por hilera y sentido de la pasada
+    plantsAndMeters: (n: number, m?: number | null) => (m ? `${n} plantas · ≈${Math.round(m)} m` : `${n} plantas`),
+    segmentHint: (a: number, b: number, meters: number | null, i: number | null, total: number) =>
+      `plantas ${a}–${b}` + (meters ? ` · ≈${meters} m` : '') + (i ? ` · ${i} de ${total}` : ''),
+    route: (ascending: boolean, plants: number, first: string | null) =>
+      (ascending ? `De la planta 1 a la ${plants}` : `De la planta ${plants} a la 1 (de vuelta)`) +
+      (first ? ` · empieza en ${first}` : ''),
+    routeLabel: 'Recorrido',
+    layoutWarn: (n: number, expected: number) =>
+      `Esta hilera tiene ${n} de ${expected} segmentos: la ubicación de las fotos será menos precisa. ` +
+      `En la web: Catálogos → lote → «Aplicar ${expected} segmentos».`,
   },
   pass: {
     title: 'Pasada activa',
@@ -296,6 +313,11 @@ export const S = {
     current: 'Actual',
     confirm: 'Confirmar',
     changed: (code: string) => `Marcador ${code}`,
+    // v0.6.0 (ADR 0011)
+    next: 'Siguiente segmento',
+    nextHint: (marker: string) => `Al pasar el marcador ${marker}`,
+    lastSegment: 'Estás en el último segmento de la hilera: termina la pasada al llegar al final.',
+    others: 'Todos los marcadores',
   },
   closePass: {
     title: 'Terminar pasada',

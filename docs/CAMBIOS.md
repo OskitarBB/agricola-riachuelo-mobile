@@ -1,3 +1,33 @@
+# Informe de avance — App móvil v0.6.0 (formato maestro §23.2)
+
+**Tarea:** segmentos fijos por hilera (pedido de Oscar). **Fecha:** 2026-10-20 · **CFG-10** · esquema SQLite **5**
+(migración 005). Requiere la plataforma web **v1.4** (ADR-W-010). Decisión: `docs/adr/0011-segmentos-fijos-por-hilera.md`.
+
+## Hecho
+- **Regla compartida con la web:** cada hilera tiene 10 segmentos (≈20 m en hileras de 200 m) que comparten sus dos
+  laterales. La cantidad llega en el bootstrap (`segmentRules.perRow`); sin ella, CFG-10 usa 10.
+- **PANT-15 Nueva pasada:** el sentido se deduce (A de la planta 1 a la última; B de vuelta) y se proponen el segmento
+  y el marcador de ese extremo. Muestra plantas y metros de la hilera, «plantas 27–40 · ≈20 m · 3 de 10» por
+  segmento y un aviso si la hilera no tiene sus 10 segmentos.
+- **PANT-17 Cambiar marcador:** «Siguiente segmento» arriba y ya seleccionado; en el LATERAL B registra el segmento
+  correcto al cruzar el poste del límite.
+- **PANT-12 Pasada activa:** «H05 S3 · 3 de 10». **PANT-11 Catálogos:** segmentos por hilera e hileras con otra cantidad.
+- Versión 0.6.0 (Android versionCode 12, iOS build 12).
+
+## Archivos
+Nuevos: `src/domain/segments.ts`, `src/storage/migrations/005_row_length.ts`, `__tests__/segments.test.ts`,
+`docs/adr/0011-segmentos-fijos-por-hilera.md`. Modificados: `app/controller/{new-pass,marker,pass,catalogs}.tsx`,
+`src/domain/types.ts`, `src/api/dto.ts`, `src/config/defaults.ts`, `src/storage/db.ts`,
+`src/storage/repositories/{catalogRepo,appMetaRepo}.ts`, `src/controller/catalogService.ts`, `src/ui/strings.ts`,
+`__tests__/config.test.ts`, `app.json`, `package.json`, `package-lock.json`.
+
+## Resultado
+`tsc`: 0 errores · `eslint`: 0 · Jest **18 suites / 157 pruebas OK** (13 nuevas).
+
+## Pendiente
+- Generar el APK 0.6.0 (`npm run build:apk:piloto`) e instalarlo en los tres celulares (misma versión, RN-17).
+- Probar en campo el cambio de segmento del LATERAL B con postes reales.
+
 # Informe de avance — App móvil v0.5.0 (formato maestro §23.2)
 
 **Tarea:** «Ubicar plaga» y especialista en la app. **Fecha:** 2026-10-08 · **CFG-8** · esquema SQLite 4 (sin migración).

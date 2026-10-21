@@ -16,9 +16,10 @@ import { MIGRATION_001 } from './migrations/001_initial';
 import { MIGRATION_002 } from './migrations/002_cobertura';
 import { MIGRATION_003 } from './migrations/003_remote_uploads'; // v2.0: subida directa a Cloudinary (12.1.1)
 import { MIGRATION_004 } from './migrations/004_catalog_codes'; // Fase 4: códigos de catálogo no únicos (ADR 0007)
+import { MIGRATION_005 } from './migrations/005_row_length'; // v0.6.0: largo de la hilera en metros (ADR 0011)
 
-/** Índice + 1 = versión del esquema. Nunca modificar una migración publicada: agregar 005, 006… */
-export const MIGRATIONS: readonly string[] = [MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004];
+/** Índice + 1 = versión del esquema. Nunca modificar una migración publicada: agregar 006, 007… */
+export const MIGRATIONS: readonly string[] = [MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004, MIGRATION_005];
 
 export const DB_NAME = 'riachuelo.db';
 

@@ -29,7 +29,9 @@ export type MetaKey =
   | 'ui_sounds'
   | 'ui_haptics'
   | 'pest_reports_json'
-  | 'deleted_cursor';
+  | 'deleted_cursor'
+  // v0.6.0 (ADR 0011): cantidad fija de segmentos por hilera recibida en el bootstrap (segmentRules.perRow).
+  | 'segments_per_row';
 
 export async function getMeta(key: MetaKey, db: Db = getDb()): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string | null }>('SELECT value FROM app_meta WHERE key = ?', [key]);

@@ -1,7 +1,9 @@
 // app/controller/new-pass.tsx — PANT-15 Nueva pasada (maestro §8.4 y §8.7; RF-16, RF-20; RN-10, RN-12).
 //
 // QUÉ HACE: selectores encadenados SIN internet (lote → hilera → segmento → marcador de inicio), lateral
-// (A primero). La dirección no se elige en pantalla: se registra ASCENDENTE por defecto. Si ese lateral ya se hizo en la hilera, es "Repetir lateral" y exige el motivo
+// (A primero). La dirección no se elige en pantalla. v0.6.0 (ADR 0011): se DEDUCE — LATERAL A de la planta 1 a la
+// última; LATERAL B de vuelta (contrario al último A cerrado, ADR 0004) — y el segmento y el marcador de inicio se
+// proponen en ese extremo. Si ese lateral ya se hizo en la hilera, es "Repetir lateral" y exige el motivo
 // (incidencia OPERADOR). "Iniciar pasada" exige ambas cámaras CONECTADA, prueba corta aprobada y batería/
 // espacio mínimos (RN-10): envía START_PASS y, con el ACK de ambas, la pasada queda ACTIVA (≤ 3 toques, RNF-08).
 // Puede recibir parámetros (lotId, rowId, lateral) desde "Crear LATERAL B" u "Otra hilera" (PANT-18).
@@ -13,8 +15,11 @@ import { StyleSheet, Text, View } from 'react-native';
 import { catalogs } from '../../src/controller/catalogService';
 import { controllerRuntime } from '../../src/controller/controllerRuntime';
 import { useController } from '../../src/controller/controllerStore';
+import { cyclePassesOfRow } from '../../src/controller/coverageService';
 import { evaluateNewPass } from '../../src/controller/passService';
-import type { FieldRow, LateralCode, Lot, Marker, Segment } from '../../src/domain/types';
+import { entryMarkerOf, rowCoverage, startPointOf } from '../../src/domain/coverage';
+import { approxMeters, DEFAULT_SEGMENTS_PER_ROW, passDirectionFor, rowLayout, segmentPosition } from '../../src/domain/segments';
+import type { Direction, FieldRow, LateralCode, Lot, Marker, Segment } from '../../src/domain/types';
 import { AppButton } from '../../src/ui/components/AppButton';
 import { AppHeader } from '../../src/ui/components/AppHeader';
 import { Card } from '../../src/ui/components/Card';
@@ -39,8 +44,11 @@ export default function NewPassScreen() {
   const [lotId, setLotId] = useState<string | null>(params.lotId ?? null);
   const [rowId, setRowId] = useState<string | null>(params.rowId ?? null);
   const [lateral, setLateral] = useState<LateralCode>(params.lateral === 'LATERAL_B' ? 'LATERAL_B' : 'LATERAL_A');
-  const [segmentId, setSegmentId] = useState<string | null>(null);
-  const [markerId, setMarkerId] = useState<string | null>(null);
+  /** Sentido de la pasada: se deduce del lateral y de las pasadas del ciclo (no se elige en pantalla). */
+  const [direction, setDirection] = useState<Direction>('ASCENDENTE');
+  const [perRow, setPerRow] = useState(DEFAULT_SEGMENTS_PER_ROW);
+  /** Elección manual de segmento/marcador; vale solo para la hilera, lateral y sentido en que se hizo. */
+  const [pick, setPick] = useState<{ key: string; segmentId: string | null; markerId: string | null } | null>(null);
   /** Hilera cuyos marcadores ya se leyeron (para avisar si no tiene ninguno sin parpadear). */
   const [markersFor, setMarkersFor] = useState<string | null>(null);
   const [isRepeat, setIsRepeat] = useState(false);
@@ -50,6 +58,7 @@ export default function NewPassScreen() {
 
   useEffect(() => {
     void catalogs.lots().then(setLots);
+    void catalogs.segmentsPerRow().then(setPerRow);
   }, []);
   useEffect(() => {
     // Sin lote: lista vacía. El estado se actualiza en la promesa (no de forma síncrona en el efecto).
@@ -68,10 +77,6 @@ export default function NewPassScreen() {
         if (!alive) return;
         setMarkers(m);
         setMarkersFor(rowId);
-        // Por defecto, el primer marcador de INICIO.
-        const def = m.find((x) => x.position === 'INICIO');
-        setMarkerId(def?.id ?? m[0]?.id ?? null);
-        setSegmentId(def?.segmentId ?? null);
       });
     }
     return () => {
@@ -79,12 +84,35 @@ export default function NewPassScreen() {
     };
   }, [rowId]);
   useEffect(() => {
+    // A: ascendente. B: de vuelta, en sentido contrario al último LATERAL A cerrado en el ciclo (coverage.ts).
+    if (!rowId) return;
+    let alive = true;
+    void cyclePassesOfRow(rowId).then((passes) => {
+      if (alive) setDirection(passDirectionFor(lateral, rowCoverage(rowId, passes).directionB));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [rowId, lateral]);
+  useEffect(() => {
     if (!session || !rowId) return;
     void evaluateNewPass(session.sessionId, rowId, lateral).then((e) => {
       setIsRepeat(e.isRepeat);
       setRuleCode(e.rule.ok ? null : e.rule.code);
     });
   }, [session, rowId, lateral]);
+
+  // Punto de partida propuesto: primer segmento del recorrido y su marcador de entrada (INICIO o FIN).
+  const ctxKey = `${rowId}|${lateral}|${direction}`;
+  const startPoint = useMemo(
+    () => (rowId && markersFor === rowId ? startPointOf(segments, markers, direction) : null),
+    [rowId, markersFor, segments, markers, direction],
+  );
+  const chosen = pick && pick.key === ctxKey ? pick : null;
+  const segmentId = chosen ? chosen.segmentId : (startPoint?.segment?.id ?? startPoint?.marker?.segmentId ?? null);
+  const markerId = chosen ? chosen.markerId : (startPoint?.marker?.id ?? null);
+  const row = rows.find((r) => r.id === rowId) ?? null;
+  const layout = row && markersFor === rowId ? rowLayout(row, segments, perRow) : null;
 
   const markerItems = useMemo(
     () =>
@@ -104,8 +132,8 @@ export default function NewPassScreen() {
       lotId,
       rowId,
       lateral,
-      // La dirección ya no se elige en pantalla; la base de datos y el protocolo la exigen, se envía la de defecto.
-      direction: 'ASCENDENTE',
+      // La dirección no se elige en pantalla: se deduce del lateral (ADR 0011).
+      direction,
       segmentId: segmentId ?? markers.find((m) => m.id === markerId)?.segmentId ?? null,
       markerId,
       repeatReason: isRepeat ? reason : null,
@@ -157,7 +185,11 @@ export default function NewPassScreen() {
         />
         <PickerSheet
           label={S.newPass.row}
-          items={rows.map((r) => ({ value: r.id, label: `${S.newPass.row} ${r.number}`, hint: S.newPass.plants(r.plantCount) }))}
+          items={rows.map((r) => ({
+            value: r.id,
+            label: `${S.newPass.row} ${r.number}`,
+            hint: S.newPass.plantsAndMeters(r.plantCount, r.lengthM),
+          }))}
           value={rowId}
           onChange={setRowId}
           disabled={!lotId}
@@ -171,20 +203,42 @@ export default function NewPassScreen() {
           value={lateral}
           onChange={setLateral}
         />
+        {row ? (
+          <Text style={styles.route}>
+            {S.newPass.routeLabel}: {S.newPass.route(direction === 'ASCENDENTE', row.plantCount, startPoint?.segment?.code ?? null)}
+          </Text>
+        ) : null}
       </Card>
       <Card delay={130}>
         <PickerSheet
           label={S.newPass.segment}
-          items={segments.map((s) => ({ value: s.id, label: s.code, hint: `${s.startPlant}–${s.endPlant}` }))}
+          items={segments.map((s) => ({
+            value: s.id,
+            label: s.code,
+            hint: S.newPass.segmentHint(
+              s.startPlant,
+              s.endPlant,
+              approxMeters(row, s),
+              segmentPosition(segments, s.id, perRow)?.index ?? null,
+              segments.length,
+            ),
+          }))}
           value={segmentId}
           onChange={(v) => {
-            setSegmentId(v);
-            const first = markers.find((m) => m.segmentId === v && m.position === 'INICIO');
-            if (first) setMarkerId(first.id);
+            // Al elegir otro segmento se propone su marcador de entrada en el sentido de la pasada.
+            const seg = segments.find((s) => s.id === v);
+            const entry = seg ? entryMarkerOf(seg, markers, direction) : null;
+            setPick({ key: ctxKey, segmentId: v, markerId: entry?.id ?? markerId });
           }}
           disabled={!rowId}
         />
-        <PickerSheet label={S.newPass.marker} items={markerItems} value={markerId} onChange={setMarkerId} disabled={!rowId} />
+        <PickerSheet
+          label={S.newPass.marker}
+          items={markerItems}
+          value={markerId}
+          onChange={(v) => setPick({ key: ctxKey, segmentId, markerId: v })}
+          disabled={!rowId}
+        />
       </Card>
       {isRepeat ? (
         <FadeIn from="scale">
@@ -196,6 +250,9 @@ export default function NewPassScreen() {
       {rowId && markersFor === rowId && markers.length === 0 ? (
         <Text style={styles.warn}>{messageFor('HILERA_SIN_MARCADORES')}</Text>
       ) : null}
+      {layout && !layout.standard && layout.count > 0 ? (
+        <Text style={styles.warn}>{S.newPass.layoutWarn(layout.count, layout.expected)}</Text>
+      ) : null}
       {ruleCode ? <Text style={styles.warn}>{messageFor(ruleCode)}</Text> : null}
     </Screen>
   );
@@ -206,5 +263,6 @@ const styles = StyleSheet.create({
   cam: { flex: 1, backgroundColor: colors.card, borderRadius: radius.md, padding: 12, gap: 6 },
   camName: { fontSize: font.body, fontWeight: font.weightBold, color: colors.text },
   label: { fontSize: font.label, color: colors.textMuted, fontWeight: font.weightMedium, marginBottom: 6 },
+  route: { fontSize: font.label, color: colors.textMuted, marginTop: 10 },
   warn: { backgroundColor: colors.warnBg, padding: 12, borderRadius: radius.md, fontSize: font.body, color: colors.text },
 });

@@ -4,7 +4,11 @@ import { checkConfigCoherence, CONFIG_VERSION, DEFAULT_CONFIG } from '../src/con
 
 test('la configuración por defecto cumple todas las reglas de coherencia', () => {
   expect(checkConfigCoherence(DEFAULT_CONFIG)).toEqual([]);
-  expect(CONFIG_VERSION).toBe('CFG-9');
+  expect(CONFIG_VERSION).toBe('CFG-10');
+});
+
+test('CFG-10: 10 segmentos fijos por hilera mientras el servidor no envíe otra cantidad', () => {
+  expect(DEFAULT_CONFIG.catalog.segmentsPerRow).toBe(10);
 });
 
 test('detecta una espera de respuesta demasiado corta', () => {

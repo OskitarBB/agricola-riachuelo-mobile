@@ -51,9 +51,13 @@
 //    qué fotos y sesiones borró el administrador (GET /mobile/deleted-captures); requestTimeoutMs (30 s); maxPages
 //    (5): páginas por consulta. La app borra el archivo de esas fotos y cierra su cola (la fila queda, RN-09).
 //
+// CAMBIOS CFG-9 → CFG-10 (segmentos fijos por hilera, app 0.6.0, plataforma v1.4, ADR 0011):
+//  - catalog.segmentsPerRow: NUEVO (10). Cantidad fija de segmentos por hilera si el servidor no envía
+//    segmentRules.perRow en el bootstrap (plataforma anterior a v1.4). Con v1.4 manda el valor de la web.
+//
 // Los valores marcados "calibrar" son iniciales: se ajustan con mediciones y NO son resultados validados.
 
-export const CONFIG_VERSION = 'CFG-9';
+export const CONFIG_VERSION = 'CFG-10';
 
 export interface AppConfig {
   auth: {
@@ -67,6 +71,8 @@ export interface AppConfig {
   };
   catalog: {
     bootstrapWarnAgeHours: number; // advertir si los catálogos son más antiguos
+    /** v0.6.0 (ADR 0011): segmentos fijos por hilera si el servidor no envía segmentRules (plataforma < v1.4). */
+    segmentsPerRow: number;
   };
   pairing: {
     controlPort: number;
@@ -233,7 +239,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     refreshMarginSeconds: 60,
     clockSkewWarnSeconds: 120,
   },
-  catalog: { bootstrapWarnAgeHours: 72 },
+  catalog: { bootstrapWarnAgeHours: 72, segmentsPerRow: 10 },
   pairing: { controlPort: 8765, filePort: 8766, requireSameAppVersion: false, pairingTokenBytes: 16 },
   protocol: {
     version: 1,

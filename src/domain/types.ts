@@ -80,6 +80,8 @@ export interface FieldRow {
   lotId: string;
   number: number;
   plantCount: number;
+  /** v0.6.0 (plataforma v1.4, ADR-W-010): largo aproximado en metros, o null si la web no lo tiene. */
+  lengthM?: number | null;
   active: boolean;
 }
 export interface Segment {

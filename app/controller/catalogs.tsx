@@ -77,6 +77,18 @@ export default function CatalogsScreen() {
           <AnimatedCounter value={info?.markers ?? 0} label={S.catalogs.markers} color={colors.gold} />
         </View>
       </Card>
+      {info && has ? (
+        <Card delay={150}>
+          <InfoRow label={S.catalogs.perRow} value={String(info.segmentsPerRow)} />
+          <InfoRow
+            label={S.catalogs.offStandard}
+            right={<StatusPill label={String(info.rowsOffStandard)} tone={info.rowsOffStandard ? 'warn' : 'ok'} />}
+          />
+        </Card>
+      ) : null}
+      {info && has && info.rowsOffStandard > 0 ? (
+        <Text style={styles.warn}>{S.catalogs.offStandardWarn(info.rowsOffStandard, info.segmentsPerRow)}</Text>
+      ) : null}
       {state === 'VACIO' ? <Text style={styles.warn}>{messageFor('CATALOGOS_VACIOS')}</Text> : null}
       {!online ? <Text style={styles.warn}>{messageFor('SIN_INTERNET')}</Text> : null}
       {info && isCatalogOld(info) ? <Text style={styles.warn}>{messageFor('CATALOGOS_ANTIGUOS')}</Text> : null}

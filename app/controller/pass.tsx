@@ -18,6 +18,7 @@ import { Animated, StyleSheet, Text, View, useAnimatedValue } from 'react-native
 import { catalogs } from '../../src/controller/catalogService';
 import { controllerRuntime } from '../../src/controller/controllerRuntime';
 import { useController } from '../../src/controller/controllerStore';
+import { segmentLabel } from '../../src/domain/segments';
 import type { CameraRole } from '../../src/domain/types';
 import { useFieldKeepAwake } from '../../src/device/keepAwake';
 import { AnimatedCounter } from '../../src/ui/components/AnimatedCounter';
@@ -48,17 +49,20 @@ export default function PassScreen() {
   useEffect(() => {
     if (!pass) return;
     void (async () => {
-      const [lot, row, marker, segment] = await Promise.all([
+      const [lot, row, marker, segment, rowSegments, perRow] = await Promise.all([
         catalogs.lot(pass.lotId),
         catalogs.row(pass.rowId),
         pass.currentMarkerId ? catalogs.marker(pass.currentMarkerId) : Promise.resolve(null),
         pass.currentSegmentId ? catalogs.segment(pass.currentSegmentId) : Promise.resolve(null),
+        catalogs.segments(pass.rowId),
+        catalogs.segmentsPerRow(),
       ]);
       setNames({
         lot: lot?.code ?? pass.lotId,
         row: row ? String(row.number) : pass.rowId,
         marker: marker?.code ?? '—',
-        segment: segment?.code ?? '—',
+        // v0.6.0 (ADR 0011): «H05 S3 · 3 de 10» para saber cuánto falta de la hilera.
+        segment: segmentLabel(segment, rowSegments, perRow),
       });
     })();
   }, [pass]);

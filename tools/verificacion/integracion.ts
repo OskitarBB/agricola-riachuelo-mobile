@@ -94,9 +94,9 @@ async function main() {
   const identity = await loadDeviceIdentity();
   useAppSession.getState().set({ identity, deviceRole: 'CONTROLADOR', booted: true });
 
-  await step('migraciones 001–004 aplicadas (user_version = 4)', async () => {
+  await step('migraciones 001–005 aplicadas (user_version = 5)', async () => {
     const r = await getDb().getFirstAsync<{ user_version: number }>('PRAGMA user_version', []);
-    assert.equal(r?.user_version, 4);
+    assert.equal(r?.user_version, 5);
   });
 
   // ---------------------------------------------------------------- autenticación contra Django
@@ -171,6 +171,8 @@ async function main() {
     assert.ok(r.ok, JSON.stringify(r));
     if (!r.ok) return;
     assert.ok(r.info.lots > 0 && r.info.rows > 0 && r.info.segments > 0 && r.info.markers > 0);
+    // v0.6.0 (plataforma v1.4, ADR-W-010): la cantidad fija de segmentos por hilera llega en el bootstrap.
+    assert.equal(r.info.segmentsPerRow, 10);
     // Una hilera con segmento y marcadores (en el catálogo del piloto solo algunas los tienen).
     for (const lot of await catalogs.lots()) {
       for (const row of await catalogs.rows(lot.id)) {

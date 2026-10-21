@@ -23,6 +23,7 @@ import {
   getMarker,
   getRow,
   getSegment,
+  getSegmentsPerRow,
   listLots,
   listMarkers,
   listRows,
@@ -48,6 +49,8 @@ export async function updateCatalogs(): Promise<{ ok: true; info: CatalogInfo } 
       rows: info.rows,
       segments: info.segments,
       markers: info.markers,
+      segmentsPerRow: info.segmentsPerRow,
+      rowsOffStandard: info.rowsOffStandard,
       quality: data.qualityProfile?.version ?? null,
     });
     return { ok: true, info };
@@ -94,4 +97,6 @@ export const catalogs = {
   row: (id: string) => getRow(id),
   segment: (id: string) => getSegment(id),
   marker: (id: string) => getMarker(id),
+  /** v0.6.0 (ADR 0011): cantidad fija de segmentos por hilera (bootstrap o valor por defecto). */
+  segmentsPerRow: (): Promise<number> => getSegmentsPerRow(),
 };

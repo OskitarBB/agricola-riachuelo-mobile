@@ -10,6 +10,7 @@
 // entre hileras (migración 004, ADR 0007); el id es la clave.
 
 import type { BootstrapResponse } from '../../api/dto';
+import { CONFIG } from '../../config';
 import type { FieldRow, Lot, Marker, MarkerPosition, Segment } from '../../domain/types';
 import { nowIso } from '../../domain/time';
 import { getDb, inTransaction, type Db } from '../db';
@@ -25,7 +26,7 @@ export async function replaceCatalogs(data: BootstrapResponse): Promise<void> {
     // Sentencias preparadas: cientos de filas se insertan rápido dentro de la misma transacción.
     const insLot = await txn.prepareAsync('INSERT INTO cat_lots (id, code, name, active) VALUES (?, ?, ?, ?)');
     const insRow = await txn.prepareAsync(
-      'INSERT INTO cat_rows (id, lot_id, number, plant_count, active) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO cat_rows (id, lot_id, number, plant_count, active, length_m) VALUES (?, ?, ?, ?, ?, ?)',
     );
     const insSeg = await txn.prepareAsync(
       'INSERT INTO cat_segments (id, row_id, code, start_plant, end_plant, is_pilot) VALUES (?, ?, ?, ?, ?, ?)',
@@ -35,7 +36,9 @@ export async function replaceCatalogs(data: BootstrapResponse): Promise<void> {
     );
     try {
       for (const l of data.lots) await insLot.executeAsync([l.id, l.code, l.name, l.active ? 1 : 0]);
-      for (const r of data.rows) await insRow.executeAsync([r.id, r.lotId, r.number, r.plantCount, r.active ? 1 : 0]);
+      for (const r of data.rows) {
+        await insRow.executeAsync([r.id, r.lotId, r.number, r.plantCount, r.active ? 1 : 0, r.lengthM ?? null]);
+      }
       for (const s of data.segments) {
         await insSeg.executeAsync([s.id, s.rowId, s.code, s.startPlant, s.endPlant, s.isPilot ? 1 : 0]);
       }
@@ -51,6 +54,9 @@ export async function replaceCatalogs(data: BootstrapResponse): Promise<void> {
     await setMeta('catalog_version', data.catalogVersion, txn);
     await setMeta('bootstrap_at', nowIso(), txn);
     await setMeta('quality_profile_version', data.qualityProfile?.version ?? null, txn);
+    // v0.6.0 (ADR 0011): cantidad fija de segmentos por hilera (null → la app usa catalog.segmentsPerRow).
+    const perRow = data.segmentRules?.perRow;
+    await setMeta('segments_per_row', perRow && perRow > 0 ? String(Math.round(perRow)) : null, txn);
     // Se guarda el perfil completo para reaplicarlo al arrancar (src/boot.ts) aunque no haya internet.
     await setMeta('quality_profile_json', data.qualityProfile ? JSON.stringify(data.qualityProfile) : null, txn);
   });
@@ -63,10 +69,26 @@ export interface CatalogInfo {
   rows: number;
   segments: number;
   markers: number;
+  /** v0.6.0 (ADR 0011): cantidad fija de segmentos por hilera vigente (servidor o valor por defecto). */
+  segmentsPerRow: number;
+  /** Hileras activas cuya cantidad de segmentos no es la fija (aviso: siguen funcionando). */
+  rowsOffStandard: number;
+}
+
+/** Cantidad fija de segmentos por hilera: la del último bootstrap o, si no vino, catalog.segmentsPerRow. */
+export async function getSegmentsPerRow(db: Db = getDb()): Promise<number> {
+  const raw = Number(await getMeta('segments_per_row', db));
+  return Number.isFinite(raw) && raw > 0 ? raw : CONFIG.catalog.segmentsPerRow;
 }
 
 export async function getCatalogInfo(db: Db = getDb()): Promise<CatalogInfo> {
   const count = async (t: string) => (await db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) AS n FROM ${t}`, []))?.n ?? 0;
+  const perRow = await getSegmentsPerRow(db);
+  const off = await db.getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM cat_rows r
+     WHERE r.active = 1 AND (SELECT COUNT(*) FROM cat_segments s WHERE s.row_id = r.id) <> MIN(?, r.plant_count)`,
+    [perRow],
+  );
   return {
     version: await getMeta('catalog_version', db),
     bootstrapAt: await getMeta('bootstrap_at', db),
@@ -74,6 +96,8 @@ export async function getCatalogInfo(db: Db = getDb()): Promise<CatalogInfo> {
     rows: await count('cat_rows'),
     segments: await count('cat_segments'),
     markers: await count('cat_markers'),
+    segmentsPerRow: perRow,
+    rowsOffStandard: off?.n ?? 0,
   };
 }
 
@@ -85,12 +109,29 @@ export async function listLots(db: Db = getDb()): Promise<Lot[]> {
   return rows.map((r) => ({ id: r.id, code: r.code, name: r.name, active: r.active === 1 }));
 }
 
+interface RowRow {
+  id: string;
+  lot_id: string;
+  number: number;
+  plant_count: number;
+  active: number;
+  length_m?: number | null;
+}
+
+function rowToDomain(r: RowRow): FieldRow {
+  return {
+    id: r.id,
+    lotId: r.lot_id,
+    number: r.number,
+    plantCount: r.plant_count,
+    lengthM: r.length_m ?? null,
+    active: r.active === 1,
+  };
+}
+
 export async function listRows(lotId: string, db: Db = getDb()): Promise<FieldRow[]> {
-  const rows = await db.getAllAsync<{ id: string; lot_id: string; number: number; plant_count: number; active: number }>(
-    'SELECT * FROM cat_rows WHERE lot_id = ? AND active = 1 ORDER BY number',
-    [lotId],
-  );
-  return rows.map((r) => ({ id: r.id, lotId: r.lot_id, number: r.number, plantCount: r.plant_count, active: r.active === 1 }));
+  const rows = await db.getAllAsync<RowRow>('SELECT * FROM cat_rows WHERE lot_id = ? AND active = 1 ORDER BY number', [lotId]);
+  return rows.map(rowToDomain);
 }
 
 export async function listSegments(rowId: string, db: Db = getDb()): Promise<Segment[]> {
@@ -159,11 +200,8 @@ export async function getLot(id: string, db: Db = getDb()): Promise<Lot | null> 
 }
 
 export async function getRow(id: string, db: Db = getDb()): Promise<FieldRow | null> {
-  const r = await db.getFirstAsync<{ id: string; lot_id: string; number: number; plant_count: number; active: number }>(
-    'SELECT * FROM cat_rows WHERE id = ?',
-    [id],
-  );
-  return r ? { id: r.id, lotId: r.lot_id, number: r.number, plantCount: r.plant_count, active: r.active === 1 } : null;
+  const r = await db.getFirstAsync<RowRow>('SELECT * FROM cat_rows WHERE id = ?', [id]);
+  return r ? rowToDomain(r) : null;
 }
 
 export async function getSegment(id: string, db: Db = getDb()): Promise<Segment | null> {

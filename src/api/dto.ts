@@ -132,6 +132,11 @@ export interface BootstrapResponse {
   lateralCodes: LateralCode[];
   /** Perfil de calidad y parámetros publicados por el backend; si faltan, la app usa sus valores por defecto. */
   qualityProfile: { version: string; params: Record<string, number> } | null;
+  /**
+   * v0.6.0 (plataforma v1.4, ADR-W-010): cantidad FIJA de segmentos por hilera (los dos laterales la comparten) y
+   * distancia entre plantas. Opcional: una plataforma anterior no la envía y la app usa catalog.segmentsPerRow.
+   */
+  segmentRules?: { perRow: number; plantSpacingM?: number } | null;
   serverTime: ISODateString;
 }
 
