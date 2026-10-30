@@ -288,7 +288,17 @@ export const S = {
     changeMarker: 'CAMBIAR MARCADOR',
     endPass: 'TERMINAR PASADA',
     pairing: 'Vincular cámaras',
-    retake: (cam: string, n: number) => `Repetir ${cam} (secuencia ${n})`,
+    // v0.6.1 (ADR 0012): repetición con límite de intentos; CAPTURAR repite en vez de sacar una secuencia nueva.
+    retakeButton: (cams: string, attempt: number, max: number) => `REPETIR ${cams.toUpperCase()}\nINTENTO ${attempt} DE ${max}`,
+    retakePending: (cam: string, seq: number, attempt: number, max: number) =>
+      `${cam} falló en la secuencia ${seq}: intento ${attempt} de ${max}.`,
+    retakeHintManual: (max: number) =>
+      `Toca REPETIR. No sale otra captura hasta que esta cámara tome bien. En el intento ${max} la foto se acepta ` +
+      'aunque salga borrosa u oscura: se envía, la evalúa la IA y se sigue normal.',
+    retakeHintAuto: (max: number) =>
+      `Se repite sola antes de la siguiente captura. En el intento ${max} la foto se acepta aunque salga borrosa ` +
+      'u oscura: se envía, la evalúa la IA y se sigue normal.',
+    bothCams: 'las 2 cámaras',
     auto: 'Captura automática',
     autoActive: 'ACTIVA',
     autoPaused: 'PAUSADA',

@@ -75,8 +75,11 @@ export interface ControllerLiveState {
   serverError: string | null;
   resyncing: boolean;
   shortTest: Record<CameraRole, ShortTestCamResult> & { running: boolean; passed: boolean; offsetMs: number | null };
-  /** Repeticiones disponibles (8.5): por cámara, la secuencia más reciente con resultado repetible. */
-  retakes: { role: CameraRole; sequenceNumber: number; sequenceId: string }[];
+  /**
+   * Repeticiones pendientes (8.5). v0.6.1 (ADR 0012): solo de la ÚLTIMA secuencia y con un máximo de intentos por
+   * cámara (capture.maxRetakesPerCamera). Mientras haya alguna, CAPTURAR repite en vez de sacar una secuencia nueva.
+   */
+  retakes: { role: CameraRole; sequenceNumber: number; sequenceId: string; attempt: number; maxAttempts: number }[];
   /** Mensaje efímero para la interfaz (toast), con id para no repetirlo. */
   notice: { id: number; code: string; kind: 'info' | 'warn' | 'error' | 'success' } | null;
   ownBattery: number | null;

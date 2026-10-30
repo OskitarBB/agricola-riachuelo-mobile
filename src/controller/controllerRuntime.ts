@@ -21,7 +21,7 @@ import { useAppSession } from '../auth/authStore';
 import { CONFIG } from '../config';
 import { newId } from '../domain/ids';
 import { canChangeMarker, canResumePass, canStartPass, type DeviceHealth } from '../domain/rules';
-import { isRetakeable } from '../domain/sequence';
+import { isLastAttempt, pendingRetakes, type PendingRetake } from '../domain/sequence';
 import { addMsIso, nowIso, nowMs } from '../domain/time';
 import type {
   CameraLinkStatus,
@@ -48,8 +48,14 @@ import { createEnvelope } from '../protocol/envelope';
 import { ACK_REQUIRED, type Envelope, type LocalCaptureMeta, type MessageType, type PayloadMap } from '../protocol/messages';
 import { deleteMeta, setMetaJson } from '../storage/repositories/appMetaRepo';
 import { countMissingByRole, getCapture, upsertCapture } from '../storage/repositories/captureRepo';
-import { getOpenPass, getPass, getRetakeByCapture, listPasses } from '../storage/repositories/passRepo';
-import { getSequence, lastSequence, listSequences, markPendingAsNoResponse } from '../storage/repositories/sequenceRepo';
+import {
+  countRetakesBySequence,
+  getOpenPass,
+  getPass,
+  getRetakeByCapture,
+  listPasses,
+} from '../storage/repositories/passRepo';
+import { getSequence, lastSequence, markPendingAsNoResponse } from '../storage/repositories/sequenceRepo';
 import {
   getCurrentSession,
   getSession,
@@ -134,7 +140,6 @@ class ControllerRuntime {
   private order: Order | null = null;
   private autoTimer: ReturnType<typeof setTimeout> | null = null;
   private lastIssuedMs = 0;
-  private queuedRetake: CameraRole | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private statusTimer: ReturnType<typeof setInterval> | null = null;
   private gpsTimer: ReturnType<typeof setInterval> | null = null;
@@ -989,17 +994,12 @@ class ControllerRuntime {
     }
     const { pass, partial } = await refreshCounters(this.pass.passId);
     this.pass = pass;
-    const last = await lastSequence(pass.passId);
-    const seqs = await listSequences(pass.passId);
-    const retakes: { role: CameraRole; sequenceNumber: number; sequenceId: string }[] = [];
-    for (const role of CAMERA_ROLES) {
-      for (let i = seqs.length - 1; i >= 0; i--) {
-        if (isRetakeable(seqs[i].slots[role].outcome)) {
-          retakes.push({ role, sequenceNumber: seqs[i].sequenceNumber, sequenceId: seqs[i].sequenceId });
-          break;
-        }
-      }
-    }
+    const work = await this.pendingWork(pass.passId);
+    const last = work?.seq ?? (await lastSequence(pass.passId));
+    // v0.6.1 (ADR 0012): el aviso es solo de la última secuencia y desaparece al agotar los intentos.
+    const retakes = work
+      ? work.pending.map((r) => ({ ...r, sequenceNumber: work.seq.sequenceNumber, sequenceId: work.seq.sequenceId }))
+      : [];
     useController.setState({
       pass,
       lastSequence: last,
@@ -1335,9 +1335,28 @@ class ControllerRuntime {
     });
   }
 
-  /** Disparo MANUAL ("CAPTURAR"). En AUTOMÁTICO lo usa el temporizador. */
+  /**
+   * Disparo MANUAL ("CAPTURAR"). En AUTOMÁTICO lo usa el temporizador.
+   * v0.6.1 (ADR 0012): si en la última secuencia una cámara falló y le quedan intentos, el disparo repite esa cámara;
+   * no sale una secuencia nueva hasta que la cámara tome bien o se agoten los intentos.
+   */
   capture(): Promise<ActionResult> {
-    return this.enqueue(() => this.issueSequence());
+    return this.enqueue(() => this.issueNext());
+  }
+
+  private async issueNext(): Promise<ActionResult> {
+    if (!this.pass) return fail('PASADA_NO_ABIERTA');
+    const work = await this.pendingWork(this.pass.passId);
+    return work ? this.issueRetake(work) : this.issueSequence();
+  }
+
+  /** Repeticiones que faltan en la última secuencia de la pasada (null si no hay ninguna). */
+  private async pendingWork(passId: string): Promise<{ seq: CaptureSequence; pending: PendingRetake[] } | null> {
+    const max = CONFIG.capture.maxRetakesPerCamera;
+    const seq = await lastSequence(passId);
+    if (!seq || max <= 0) return null;
+    const pending = pendingRetakes(seq.slots, await countRetakesBySequence(seq.sequenceId), max);
+    return pending.length > 0 ? { seq, pending } : null;
   }
 
   private async issueSequence(): Promise<ActionResult> {
@@ -1397,59 +1416,63 @@ class ControllerRuntime {
   private async autoTick(): Promise<void> {
     this.autoTimer = null;
     if (this.autoState() !== 'ACTIVE' || this.order) return;
-    if (this.queuedRetake) {
-      const role = this.queuedRetake;
-      this.queuedRetake = null;
-      const r = await this.issueRetake(role);
-      if (r.ok) return;
-    }
-    const r = await this.issueSequence();
+    // Primero la repetición pendiente (si hay); después la secuencia nueva.
+    const r = await this.issueNext();
     if (!r.ok) this.scheduleAuto();
   }
 
   // ---------------------------------------------------------------- repetición (8.5, RN-07)
 
-  retake(role: CameraRole): Promise<ActionResult> {
-    if (this.autoState() === 'ACTIVE' && this.order) {
-      // En automático la repetición sale en lugar de la siguiente secuencia.
-      this.queuedRetake = role;
-      pushNotice('REPETICION_EN_COLA', 'info');
-      return Promise.resolve(OK);
-    }
-    return this.enqueue(() => this.issueRetake(role));
-  }
-
-  private async issueRetake(role: CameraRole): Promise<ActionResult> {
+  /**
+   * v0.6.1 (ADR 0012): la repetición ya no se elige con un botón por cámara. Sale sola (CAPTURAR o el temporizador)
+   * para las cámaras de la ÚLTIMA secuencia que fallaron y tienen intentos; si fallaron las dos, repiten juntas.
+   * En el último intento la orden lleva lastAttempt: la cámara acepta la foto aunque salga borrosa u oscura y esa foto
+   * se envía y la evalúa la IA. Si aun así falla (error de cámara o sin respuesta), se sigue con la siguiente captura.
+   */
+  private async issueRetake({ seq, pending }: { seq: CaptureSequence; pending: PendingRetake[] }): Promise<ActionResult> {
     if (!this.session || !this.pass || this.pass.status !== 'ACTIVE') return fail('PASADA_NO_ABIERTA');
     if (this.order) return fail('ORDEN_EN_CURSO');
-    if (this.linkOf(role) !== 'CONECTADA') return fail('CAMARA_DESCONECTADA');
-    const target = useController.getState().retakes.find((r) => r.role === role);
-    if (!target) return fail('ERROR_INESPERADO');
-    const seq = (await getSequence(target.sequenceId)) as CaptureSequence;
-    const { seq: updated, newCaptureId, replaces } = await prepareRetake(seq, role, this.pass, latestFix());
-    const issuedAt = nowIso();
-    const peer = this.peerByRole(role) as Peer;
-    const { env } = this.send(peer.deviceId, 'CAPTURE_COMMAND', {
-      purpose: 'SECUENCIA',
-      sequenceId: seq.sequenceId,
-      sequenceNumber: seq.sequenceNumber,
-      captureId: newCaptureId,
-      passId: this.pass.passId,
-      lateralCode: this.pass.lateralCode,
-      mode: this.session.mode,
-      issuedAt,
-      expiresAt: addMsIso(issuedAt, CONFIG.protocol.commandValidityMs),
-      replacesCaptureId: replaces,
-    });
+    if (pending.some((p) => this.linkOf(p.role) !== 'CONECTADA')) return fail('CAMARA_DESCONECTADA');
+    if (this.resyncing.size > 0) return fail('RESYNC_EN_CURSO');
+    const awaiting = new Map<CameraRole, { captureId: string; messageId: string; sentMs: number }>();
+    let updated = seq;
+    for (const p of pending) {
+      const prepared = await prepareRetake(updated, p.role, this.pass, latestFix());
+      updated = prepared.seq;
+      const lastAttempt = isLastAttempt(p);
+      const issuedAt = nowIso();
+      const peer = this.peerByRole(p.role) as Peer;
+      const { env } = this.send(peer.deviceId, 'CAPTURE_COMMAND', {
+        purpose: 'SECUENCIA',
+        sequenceId: seq.sequenceId,
+        sequenceNumber: seq.sequenceNumber,
+        captureId: prepared.newCaptureId,
+        passId: this.pass.passId,
+        lateralCode: this.pass.lateralCode,
+        mode: this.session.mode,
+        issuedAt,
+        expiresAt: addMsIso(issuedAt, CONFIG.protocol.commandValidityMs),
+        replacesCaptureId: prepared.replaces,
+        lastAttempt,
+      });
+      awaiting.set(p.role, { captureId: prepared.newCaptureId, messageId: env.messageId, sentMs: nowMs() });
+      patchCamera(p.role, { lastOutcome: 'PENDIENTE' });
+      logEvent(
+        'INFO',
+        'CAPTURE',
+        'RETAKE_ATTEMPT',
+        { role: p.role, sequence: seq.sequenceNumber, attempt: p.attempt, max: p.maxAttempts, lastAttempt },
+        this.session.sessionId,
+      );
+    }
     this.lastIssuedMs = nowMs();
     this.order = {
       kind: 'RETAKE',
       sequenceId: seq.sequenceId,
-      awaiting: new Map([[role, { captureId: newCaptureId, messageId: env.messageId, sentMs: nowMs() }]]),
+      awaiting,
       issuedMs: nowMs(),
       timer: setTimeout(() => void this.enqueue(() => this.onOrderTimeout()), CONFIG.protocol.captureResponseTimeoutMs),
     };
-    patchCamera(role, { lastOutcome: 'PENDIENTE' });
     useController.setState({ lastSequence: updated });
     await this.refreshPassView();
     this.publish();
@@ -1469,7 +1492,6 @@ class ControllerRuntime {
   private async pauseInternal(reason: PayloadMap['PAUSE']['reason']): Promise<void> {
     if (!this.session || !this.pass || this.pass.status !== 'ACTIVE') return;
     this.stopAuto();
-    this.queuedRetake = null;
     this.pass = await setPassStatus(this.pass, 'PAUSED');
     if (this.session.status === 'ACTIVE') this.session = await setStatus(this.session, 'PAUSED');
     void this.broadcastAcked('PAUSE', { reason });
@@ -1540,7 +1562,6 @@ class ControllerRuntime {
       if (this.order) return fail('ORDEN_EN_CURSO');
       if (status === 'INCOMPLETE' && !(reason && reason.trim().length >= 3)) return fail('INCIDENCIA_REQUERIDA');
       this.stopAuto();
-      this.queuedRetake = null;
       if (status === 'INCOMPLETE' && reason) {
         await addManualIncident({ sessionId: this.session.sessionId, passId: this.pass.passId }, 'OPERADOR', 'AVISO', reason);
       }

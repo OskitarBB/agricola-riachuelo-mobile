@@ -8,9 +8,12 @@
 //  3) Toma la foto (takePictureAsync), la mueve a captures/… o short-test/…, calcula md5 y tamaño,
 //     inserta la captura (CAPTURED, PENDIENTE_LOCAL) y evalúa la CALIDAD con la configuración de PAIRED.
 //  4) Responde CAPTURE_OK o QUALITY_ERROR y encola la transferencia (prueba corta primero; rechazadas al final).
+//  - v0.6.1 (ADR 0012): en el ÚLTIMO intento de una repetición (lastAttempt) no espera a estar quieto para disparar
+//    y no rechaza por nitidez ni exposición: responde CAPTURE_OK con PENDIENTE_REVISION_TECNICA (la IA la evalúa).
 //  - reevaluatePending(): capturas que quedaron en CAPTURED (la app se cerró durante la calidad, 8.10).
 
 import { CONFIG } from '../config';
+import { acceptOnLastAttempt } from '../domain/sequence';
 import { nowIso, nowMs } from '../domain/time';
 import type { CameraRole, Capture, QualityResult } from '../domain/types';
 import { isCameraReady, takeToFile } from '../device/cameraService';
@@ -71,6 +74,7 @@ export async function executeCapture(
   useCameraLive.setState({ capturing: true });
   const started = nowMs();
   const isTest = cmd.purpose === 'PRUEBA_CORTA';
+  const lastAttempt = cmd.purpose === 'SECUENCIA' && cmd.lastAttempt === true;
   try {
     const save = async (resp: Envelope) => saveProcessed(env.messageId, env.type, JSON.stringify(resp));
 
@@ -93,7 +97,10 @@ export async function executeCapture(
     // Modo automático: solo con la cámara quieta.
     if (cmd.mode === 'AUTOMATICO' && !isTest) {
       const stable = await stabilityDetector.waitForStable(CONFIG.capture.stability.maxWaitMs);
-      if (!stable) {
+      if (!stable && lastAttempt) {
+        logEvent('INFO', 'CAPTURE', 'MOVEMENT_LAST_ATTEMPT', { sequenceId: cmd.sequenceId }, ctx.sessionId);
+      }
+      if (!stable && !lastAttempt) {
         const resp = reply('QUALITY_ERROR', {
           sequenceId: cmd.sequenceId,
           captureId: cmd.captureId,
@@ -161,13 +168,16 @@ export async function executeCapture(
     };
     await upsertCapture(capture);
 
-    const quality = await evaluatePhoto(
+    const evaluated = await evaluatePhoto(
       photo.uri,
       photo.width,
       photo.height,
       pipelineConfigFrom(ctx.config.quality),
       ctx.config.qualityProfileVersion,
     );
+    // Último intento: una foto borrosa u oscura se acepta igual para que la evalúe la IA (no se pide otra).
+    const quality = lastAttempt ? acceptOnLastAttempt(evaluated) : evaluated;
+    if (quality !== evaluated) logEvent('INFO', 'CAPTURE', 'ACCEPTED_LAST_ATTEMPT', { was: evaluated.status }, ctx.sessionId);
     const accepted = quality.status === 'UTILIZABLE' || quality.status === 'PENDIENTE_REVISION_TECNICA';
     await persistQuality(
       cmd.captureId,

@@ -1,4 +1,4 @@
-// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-9).
+// src/config/defaults.ts — Parámetros configurables de la app (versión CFG-11).
 //
 // QUÉ HACE: concentra TODOS los umbrales, tiempos, puertos e intervalos (regla R-08 del maestro:
 // ningún número "suelto" en el código). Los servicios leen estos valores a través de src/config/index.ts.
@@ -55,9 +55,14 @@
 //  - catalog.segmentsPerRow: NUEVO (10). Cantidad fija de segmentos por hilera si el servidor no envía
 //    segmentRules.perRow en el bootstrap (plataforma anterior a v1.4). Con v1.4 manda el valor de la web.
 //
+// CAMBIOS CFG-10 → CFG-11 (límite de repeticiones, app 0.6.1, ADR 0012):
+//  - capture.maxRetakesPerCamera: NUEVO (2). Repeticiones que se piden, como máximo, a una cámara que falló en la
+//    última secuencia. Mientras haya una pendiente no sale una secuencia nueva; en el último intento la cámara
+//    acepta la foto aunque salga borrosa u oscura (se envía y la evalúa la IA). Agotados, se sigue normal.
+//
 // Los valores marcados "calibrar" son iniciales: se ajustan con mediciones y NO son resultados validados.
 
-export const CONFIG_VERSION = 'CFG-10';
+export const CONFIG_VERSION = 'CFG-11';
 
 export interface AppConfig {
   auth: {
@@ -108,6 +113,8 @@ export interface AppConfig {
     maxMegapixels: number;
     shutterSound: boolean;
     captureBudgetMs: number; // tiempo previsto para tomar, mover y calcular el md5 de la foto
+    /** CFG-11 (ADR 0012): repeticiones como máximo por cámara en una secuencia; 0 = no se repite. */
+    maxRetakesPerCamera: number;
     /** Detector de estabilidad (acelerómetro + giroscopio). Solo bloquea la captura AUTOMÁTICA. */
     stability: {
       sampleIntervalMs: number; // frecuencia de lectura de sensores
@@ -266,6 +273,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     maxMegapixels: 12, // calibrar (Q-15): ≤ 25 MP y ≤ 10 MB por foto (Cloudinary Free)
     shutterSound: false,
     captureBudgetMs: 2_000,
+    maxRetakesPerCamera: 2,
     stability: {
       sampleIntervalMs: 50,
       windowMs: 600,
@@ -361,6 +369,8 @@ export function checkConfigCoherence(cfg: AppConfig): string[] {
   if (c.intervalOptionsMs.some((v) => v < c.minIntervalMs || v > c.maxIntervalMs))
     errors.push('intervalOptionsMs fuera de límites');
   if (c.intervalMs < c.minIntervalMs || c.intervalMs > c.maxIntervalMs) errors.push('intervalMs fuera de límites');
+  if (!(Number.isInteger(c.maxRetakesPerCamera) && c.maxRetakesPerCamera >= 0 && c.maxRetakesPerCamera <= 5))
+    errors.push('capture.maxRetakesPerCamera fuera de 0–5');
   if (!cfg.sync.healthPath.startsWith('/')) errors.push('healthPath debe empezar con /');
   // Una página de RESYNC_STATE (≈ 220 bytes por captura) debe caber en maxMessageBytes.
   if (p.resyncPageSize * 220 + 512 > p.maxMessageBytes) errors.push('resyncPageSize no cabe en maxMessageBytes');

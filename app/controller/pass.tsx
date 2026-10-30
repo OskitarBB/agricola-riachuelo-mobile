@@ -3,8 +3,9 @@
 // QUÉ HACE (contexto §25.8, "menos texto, más estado y acción"):
 //  - Cabecera de estado: lote · hilera · lateral, marcador y segmento actuales, GPS y precisión, modo.
 //  - Contadores animados (total, completas, parciales, incompletas) y tarjetas de las dos cámaras.
-//  - Botones "Repetir CÁMARA X (secuencia N)" (RN-07) justo debajo de la cabecera de estado, y la última
-//    secuencia con el resultado de cada cámara.
+//  - Aviso de repetición pendiente (RN-07) justo debajo de la cabecera de estado, y la última secuencia con el
+//    resultado de cada cámara. v0.6.1 (ADR 0012): solo de la última secuencia y con 2 intentos como máximo; mientras
+//    haya uno pendiente CAPTURAR pasa a «REPETIR CÁMARA X · INTENTO a DE m» (en automático se repite sola).
 //  - MANUAL:      [CAPTURAR] [PAUSAR] [CAMBIAR MARCADOR] [TERMINAR PASADA]
 //  - AUTOMÁTICO:  "Captura automática: ACTIVA" + [PAUSAR] siempre visible; [CAMBIAR MARCADOR] solo en pausa;
 //                 en pausa: [REANUDAR] [CAMBIAR MARCADOR] [TERMINAR PASADA]  (secuencia PAUSAR → CAMBIAR → REANUDAR).
@@ -19,7 +20,6 @@ import { catalogs } from '../../src/controller/catalogService';
 import { controllerRuntime } from '../../src/controller/controllerRuntime';
 import { useController } from '../../src/controller/controllerStore';
 import { segmentLabel } from '../../src/domain/segments';
-import type { CameraRole } from '../../src/domain/types';
 import { useFieldKeepAwake } from '../../src/device/keepAwake';
 import { AnimatedCounter } from '../../src/ui/components/AnimatedCounter';
 import { AppButton } from '../../src/ui/components/AppButton';
@@ -101,7 +101,11 @@ export default function PassScreen() {
     if (!r.ok && 'code' in r && r.code) showToast(r.code, 'warn');
   };
 
-  const retakeLabel = (role: CameraRole, n: number) => S.pass.retake(ROLE_LABEL[role], n);
+  // v0.6.1 (ADR 0012): con una repetición pendiente el botón grande repite esa cámara en vez de capturar.
+  const retakeCams = retakes.length === 1 ? ROLE_LABEL[retakes[0].role] : S.pass.bothCams;
+  const retakeAttempt = Math.max(0, ...retakes.map((r) => r.attempt));
+  const retakeMax = retakes[0]?.maxAttempts ?? 0;
+  const retakeCamOffline = retakes.some((r) => cameras[r.role].link !== 'CONECTADA');
 
   return (
     <Screen
@@ -110,9 +114,9 @@ export default function PassScreen() {
         <>
           {!auto ? (
             <AppButton
-              title={S.pass.capture}
-              variant="huge"
-              disabled={paused || orderInFlight || resyncing}
+              title={retakes.length > 0 ? S.pass.retakeButton(retakeCams, retakeAttempt, retakeMax) : S.pass.capture}
+              variant={retakes.length > 0 ? 'hugeGold' : 'huge'}
+              disabled={paused || orderInFlight || resyncing || retakeCamOffline}
               loading={orderInFlight}
               onPress={() => act(() => controllerRuntime.capture())}
             />
@@ -170,18 +174,22 @@ export default function PassScreen() {
         {auto ? <InfoRow dark label={S.pass.interval} value={`${Math.round(session.intervalMs / 1000)} s`} /> : null}
       </Card>
 
-      {/* Repeticiones pendientes justo debajo del contexto, visibles sin desplazarse (RN-07). */}
-      {retakes.map((r) => (
-        <FadeIn key={`${r.role}-${r.sequenceId}`} from="right">
-          <AppButton
-            title={retakeLabel(r.role, r.sequenceNumber)}
-            variant="gold"
-            style={{ marginBottom: 10 }}
-            disabled={paused || cameras[r.role].link !== 'CONECTADA' || (orderInFlight && !auto)}
-            onPress={() => act(() => controllerRuntime.retake(r.role))}
-          />
+      {/* Repetición pendiente justo debajo del contexto, visible sin desplazarse (RN-07). Desaparece cuando la cámara
+          toma bien o se agotan los intentos (v0.6.1, ADR 0012). */}
+      {retakes.length > 0 ? (
+        <FadeIn key={retakes.map((r) => `${r.role}-${r.sequenceId}-${r.attempt}`).join('|')} from="right">
+          <View style={styles.retake}>
+            {retakes.map((r) => (
+              <Text key={r.role} style={styles.retakeTitle}>
+                {S.pass.retakePending(ROLE_LABEL[r.role], r.sequenceNumber, r.attempt, r.maxAttempts)}
+              </Text>
+            ))}
+            <Text style={styles.retakeHint}>
+              {auto ? S.pass.retakeHintAuto(retakeMax) : S.pass.retakeHintManual(retakeMax)}
+            </Text>
+          </View>
         </FadeIn>
-      ))}
+      ) : null}
 
       <Card delay={80}>
         <View style={styles.counters}>
@@ -245,6 +253,17 @@ const styles = StyleSheet.create({
   counters: { flexDirection: 'row' },
   slot: { flex: 1, gap: 6 },
   slotName: { fontSize: font.body, fontWeight: font.weightSemi, color: colors.text },
+  retake: {
+    backgroundColor: colors.warnBg,
+    borderLeftWidth: 6,
+    borderLeftColor: colors.gold,
+    padding: 12,
+    borderRadius: radius.md,
+    marginBottom: 10,
+    gap: 4,
+  },
+  retakeTitle: { fontSize: font.body, fontWeight: font.weightBold, color: colors.text },
+  retakeHint: { fontSize: 14, color: colors.textMuted },
   alert: {
     backgroundColor: colors.warnBg,
     padding: 12,

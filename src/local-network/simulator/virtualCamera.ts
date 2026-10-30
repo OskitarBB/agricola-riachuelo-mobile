@@ -15,6 +15,7 @@ import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
 
 import { CONFIG } from '../../config';
+import { acceptOnLastAttempt } from '../../domain/sequence';
 import { nowIso, nowMs } from '../../domain/time';
 import type { CameraRole, QualityResult, UserRole } from '../../domain/types';
 import { evaluatePhoto, pipelineConfigFrom } from '../../device/qualityPipeline';
@@ -240,9 +241,16 @@ export class VirtualCamera {
     if (!this.config) return void error('INTERNAL');
     this.busy = true;
     const started = nowMs();
+    // v0.6.1 (ADR 0012): en el último intento de una repetición dispara aunque se mueva y no rechaza por calidad.
+    const lastAttempt = cmd.purpose === 'SECUENCIA' && cmd.lastAttempt === true;
     try {
       // Modo automático: solo dispara con la cámara quieta.
-      if (cmd.mode === 'AUTOMATICO' && cmd.purpose === 'SECUENCIA' && Math.random() < CONFIG.simulator.movementRate) {
+      if (
+        cmd.mode === 'AUTOMATICO' &&
+        cmd.purpose === 'SECUENCIA' &&
+        !lastAttempt &&
+        Math.random() < CONFIG.simulator.movementRate
+      ) {
         await wait(CONFIG.capture.stability.maxWaitMs);
         const resp = this.send('QUALITY_ERROR', {
           sequenceId: cmd.sequenceId,
@@ -271,7 +279,8 @@ export class VirtualCamera {
       const dest = new File(ensureDir('simulator', this.role), `${cmd.captureId}.jpg`);
       copyFile(sample.uri, dest);
       const facts = fileFacts(dest.uri);
-      const quality = await this.quality(kind, sample);
+      const evaluated = await this.quality(kind, sample);
+      const quality = lastAttempt ? acceptOnLastAttempt(evaluated) : evaluated;
       this.lastSequenceId = cmd.sequenceId;
       let resp: Envelope;
       if (quality.status === 'UTILIZABLE' || quality.status === 'PENDIENTE_REVISION_TECNICA') {

@@ -225,6 +225,20 @@ export async function countRetakes(passId: string, db: Db = getDb()): Promise<nu
   return r?.n ?? 0;
 }
 
+/** v0.6.1 (ADR 0012): repeticiones ya pedidas en una secuencia, por cámara (límite de intentos). */
+export async function countRetakesBySequence(
+  sequenceId: string,
+  db: Db = getDb(),
+): Promise<Partial<Record<RetakeRequest['cameraRole'], number>>> {
+  const rows = await db.getAllAsync<{ camera_role: RetakeRequest['cameraRole']; n: number }>(
+    'SELECT camera_role, COUNT(*) AS n FROM retake_requests WHERE sequence_id = ? GROUP BY camera_role',
+    [sequenceId],
+  );
+  const used: Partial<Record<RetakeRequest['cameraRole'], number>> = {};
+  for (const r of rows) used[r.camera_role] = r.n;
+  return used;
+}
+
 export async function isRetakeCapture(captureId: string, db: Db = getDb()): Promise<boolean> {
   const r = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM retake_requests WHERE capture_id = ?', [captureId]);
   return (r?.n ?? 0) > 0;

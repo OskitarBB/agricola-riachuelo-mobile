@@ -127,6 +127,7 @@ export const PAYLOAD_SCHEMAS: Record<MessageType, z.ZodType> = {
     issuedAt: iso,
     expiresAt: iso,
     replacesCaptureId: uuid.nullable(),
+    lastAttempt: z.boolean().optional(),
   }),
   CAPTURE_OK: z.object({
     sequenceId: uuid,

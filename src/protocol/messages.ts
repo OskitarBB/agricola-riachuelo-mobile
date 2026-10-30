@@ -134,6 +134,12 @@ export interface PayloadMap {
     issuedAt: ISODateString;
     expiresAt: ISODateString;
     replacesCaptureId: UUID | null; // presente en repeticiones
+    /**
+     * v0.6.1 (ADR 0012): último intento de una repetición. La cámara toma la foto aunque el celular se mueva y no la
+     * rechaza por nitidez o exposición: la responde como PENDIENTE_REVISION_TECNICA para que se envíe y se evalúe.
+     * Opcional: una cámara anterior lo ignora y un controlador anterior no lo manda.
+     */
+    lastAttempt?: boolean;
   };
   CAPTURE_OK: {
     sequenceId: UUID;

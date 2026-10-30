@@ -13,7 +13,14 @@ import {
   SESSION_TRANSITIONS,
   SLOT_TRANSITIONS,
 } from '../src/domain/stateMachines';
-import { applyRetake, deriveSequenceStatus, isRetakeable } from '../src/domain/sequence';
+import {
+  acceptOnLastAttempt,
+  applyRetake,
+  deriveSequenceStatus,
+  isLastAttempt,
+  isRetakeable,
+  pendingRetakes,
+} from '../src/domain/sequence';
 import {
   canChangeDeviceRole,
   canChangeMarker,
@@ -27,7 +34,7 @@ import {
   nextPassOrder,
   validateSessionMode,
 } from '../src/domain/rules';
-import type { CameraRole, SequenceSlot, SlotOutcome } from '../src/domain/types';
+import type { CameraRole, QualityResult, SequenceSlot, SlotOutcome } from '../src/domain/types';
 
 const slots = (o1: SlotOutcome, o2: SlotOutcome): Record<CameraRole, SequenceSlot> => ({
   CAMERA_1: { role: 'CAMERA_1', captureId: 'c1', outcome: o1 },
@@ -93,6 +100,47 @@ describe('estado de la secuencia (RN-06) y repetición (RN-07)', () => {
     expect(isRetakeable('RECHAZADA_CALIDAD')).toBe(true);
     expect(isRetakeable('SIN_RESPUESTA')).toBe(true);
     expect(isRetakeable('OK_RECIBIDA')).toBe(false);
+  });
+});
+
+describe('límite de repeticiones (v0.6.1, ADR 0012)', () => {
+  test('una cámara que falló queda pendiente con su número de intento', () => {
+    expect(pendingRetakes(slots('OK_RECIBIDA', 'RECHAZADA_CALIDAD'), {}, 2)).toEqual([
+      { role: 'CAMERA_2', attempt: 1, maxAttempts: 2 },
+    ]);
+    expect(pendingRetakes(slots('OK_PENDIENTE_ARCHIVO', 'SIN_RESPUESTA'), { CAMERA_2: 1 }, 2)).toEqual([
+      { role: 'CAMERA_2', attempt: 2, maxAttempts: 2 },
+    ]);
+  });
+
+  test('agotados los intentos ya no se pide nada y se puede seguir', () => {
+    expect(pendingRetakes(slots('OK_RECIBIDA', 'RECHAZADA_CALIDAD'), { CAMERA_2: 2 }, 2)).toEqual([]);
+    expect(pendingRetakes(slots('OK_RECIBIDA', 'ERROR_CAMARA'), { CAMERA_2: 3 }, 2)).toEqual([]);
+    expect(pendingRetakes(slots('RECHAZADA_CALIDAD', 'RECHAZADA_CALIDAD'), {}, 0)).toEqual([]);
+  });
+
+  test('si fallan las dos, repiten las dos; mientras una repite (PENDIENTE) no se pide otra', () => {
+    expect(pendingRetakes(slots('ERROR_CAMARA', 'RECHAZADA_CALIDAD'), { CAMERA_1: 1 }, 2).map((r) => r.attempt)).toEqual([2, 1]);
+    expect(pendingRetakes(slots('OK_RECIBIDA', 'PENDIENTE'), { CAMERA_2: 1 }, 2)).toEqual([]);
+    expect(pendingRetakes(slots('OK_RECIBIDA', 'OK_RECIBIDA'), {}, 2)).toEqual([]);
+  });
+
+  test('último intento', () => {
+    expect(isLastAttempt({ attempt: 1, maxAttempts: 2 })).toBe(false);
+    expect(isLastAttempt({ attempt: 2, maxAttempts: 2 })).toBe(true);
+  });
+
+  test('en el último intento una foto borrosa u oscura se acepta para que la evalúe la IA', () => {
+    const q = (status: QualityResult['status']): QualityResult => ({
+      status,
+      reasons: ['NITIDEZ_BAJA'],
+      metrics: null,
+      profileVersion: 'Q-1',
+    });
+    expect(acceptOnLastAttempt(q('REPETIR_NITIDEZ'))).toEqual({ ...q('REPETIR_NITIDEZ'), status: 'PENDIENTE_REVISION_TECNICA' });
+    expect(acceptOnLastAttempt(q('REPETIR_EXPOSICION')).status).toBe('PENDIENTE_REVISION_TECNICA');
+    expect(acceptOnLastAttempt(q('ERROR_CAMARA')).status).toBe('ERROR_CAMARA');
+    expect(acceptOnLastAttempt(q('UTILIZABLE')).status).toBe('UTILIZABLE');
   });
 });
 

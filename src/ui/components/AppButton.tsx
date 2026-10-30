@@ -3,7 +3,7 @@
 // QUÉ HACE: al presionar se "hunde" (escala con resorte), suena (tap/confirm/shutter según la variante) y
 // vibra levemente. Altura mínima 56 dp (R-15). Muestra un indicador de carga y queda deshabilitado
 // (fondo blanco atenuado) cuando no se puede usar.
-// Variantes: primary (acción principal), secondary, danger, ghost, gold y huge (CAPTURAR).
+// Variantes: primary (acción principal), secondary, danger, ghost, gold, huge (CAPTURAR) y hugeGold (REPETIR, v0.6.1).
 
 import { type ReactNode } from 'react';
 import {
@@ -21,7 +21,7 @@ import {
 import { feedback, type SoundName } from '../feedback';
 import { colors, font, radius, shadow, touch } from '../theme';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'gold' | 'huge' | 'dark';
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'gold' | 'huge' | 'hugeGold' | 'dark';
 
 interface Props {
   title: string;
@@ -43,6 +43,7 @@ const PALETTE: Record<ButtonVariant, { bg: string; fg: string; border: string }>
   ghost: { bg: 'transparent', fg: colors.brand, border: 'transparent' },
   gold: { bg: colors.gold, fg: colors.brandDeep, border: colors.gold },
   huge: { bg: colors.brand, fg: colors.textOnDark, border: colors.brandDeep },
+  hugeGold: { bg: colors.gold, fg: colors.brandDeep, border: colors.brandDeep },
   dark: { bg: colors.brandDeep, fg: colors.textOnDark, border: colors.brandDeep },
 };
 
@@ -61,8 +62,8 @@ export function AppButton({
   const scale = useAnimatedValue(1);
   const inactive = disabled || loading;
   const p = PALETTE[variant];
-  const defaultSound: SoundName =
-    variant === 'huge' ? 'shutter' : variant === 'primary' || variant === 'gold' ? 'confirm' : 'tap';
+  const big = variant === 'huge' || variant === 'hugeGold';
+  const defaultSound: SoundName = big ? 'shutter' : variant === 'primary' || variant === 'gold' ? 'confirm' : 'tap';
 
   const pressIn = () => Animated.spring(scale, { toValue: 0.95, useNativeDriver: true, speed: 40, bounciness: 0 }).start();
   const pressOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 18, bounciness: 10 }).start();
@@ -85,7 +86,7 @@ export function AppButton({
         onPress={handlePress}
         style={[
           styles.base,
-          variant === 'huge' && styles.huge,
+          big && styles.huge,
           compact && styles.compact,
           {
             backgroundColor: inactive ? colors.disabledBg : p.bg,
@@ -101,7 +102,7 @@ export function AppButton({
             {icon ? <View style={styles.icon}>{icon}</View> : null}
             <Text
               numberOfLines={2}
-              style={[styles.text, variant === 'huge' && styles.hugeText, { color: inactive ? colors.disabledText : p.fg }]}
+              style={[styles.text, big && styles.hugeText, { color: inactive ? colors.disabledText : p.fg }]}
             >
               {title}
             </Text>

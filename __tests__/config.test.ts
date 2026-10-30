@@ -4,11 +4,18 @@ import { checkConfigCoherence, CONFIG_VERSION, DEFAULT_CONFIG } from '../src/con
 
 test('la configuración por defecto cumple todas las reglas de coherencia', () => {
   expect(checkConfigCoherence(DEFAULT_CONFIG)).toEqual([]);
-  expect(CONFIG_VERSION).toBe('CFG-10');
+  expect(CONFIG_VERSION).toBe('CFG-11');
 });
 
 test('CFG-10: 10 segmentos fijos por hilera mientras el servidor no envíe otra cantidad', () => {
   expect(DEFAULT_CONFIG.catalog.segmentsPerRow).toBe(10);
+});
+
+test('CFG-11: como máximo 2 repeticiones por cámara y se valida el rango', () => {
+  expect(DEFAULT_CONFIG.capture.maxRetakesPerCamera).toBe(2);
+  const bad = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  bad.capture.maxRetakesPerCamera = -1;
+  expect(checkConfigCoherence(bad)).toContain('capture.maxRetakesPerCamera fuera de 0–5');
 });
 
 test('detecta una espera de respuesta demasiado corta', () => {

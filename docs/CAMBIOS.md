@@ -1,3 +1,34 @@
+# Informe de avance — App móvil v0.6.1 (formato maestro §23.2)
+
+**Tarea:** límite de repeticiones por cámara (pedido de Oscar después del campo). **Fecha:** 2026-10-29 · **CFG-11** ·
+esquema SQLite 5 (sin migración) · protocolo v1 (campo opcional nuevo). Sin cambios en la plataforma. Decisión:
+`docs/adr/0012-limite-de-repeticiones.md`.
+
+## Hecho
+- **Como máximo 2 repeticiones por cámara** (`capture.maxRetakesPerCamera`) y solo de la ÚLTIMA secuencia: el aviso
+  «Repetir CÁMARA 2» ya no queda para siempre; desaparece cuando la cámara toma bien o se agotan los intentos.
+- **Bloqueo:** si una cámara tomó bien y la otra no, no sale otra captura hasta que la que falló tome bien o use sus
+  2 intentos. MANUAL: el botón grande pasa a «REPETIR CÁMARA X · INTENTO a DE m». AUTOMÁTICO: se repite sola antes
+  de la siguiente secuencia. Si fallan las dos, repiten juntas.
+- **Último intento:** la cámara dispara aunque se mueva y acepta la foto aunque salga borrosa u oscura
+  (PENDIENTE_REVISION_TECNICA): se envía, se sincroniza y la evalúa la IA. Después se sigue normal.
+- Versión 0.6.1 (Android versionCode 13, iOS build 13).
+
+## Archivos
+Nuevo: `docs/adr/0012-limite-de-repeticiones.md`. Modificados: `src/domain/sequence.ts`,
+`src/controller/{controllerRuntime,controllerStore}.ts`, `src/storage/repositories/passRepo.ts`,
+`src/protocol/{messages,schemas}.ts`, `src/camera/captureService.ts`, `src/local-network/simulator/virtualCamera.ts`,
+`src/config/defaults.ts`, `src/ui/{strings.ts,components/AppButton.tsx}`, `app/controller/pass.tsx`,
+`__tests__/{domain,protocol,config}.test.ts`, `app.json`, `package.json`, `package-lock.json`.
+
+## Resultado
+`tsc`: 0 errores · `eslint`: 0 · Jest **18 suites / 164 pruebas OK** (7 nuevas) · `simulado.ts` 9/9 · `redlocal.ts` 9/9 ·
+prueba de repeticiones contra SQLite real (límite, bloqueo, aviso solo de la última secuencia, las dos cámaras): OK.
+
+## Pendiente
+- Generar el APK 0.6.1 (`npm run build:apk:piloto`) e instalarlo en los tres celulares (misma versión, RN-17).
+- Probar en campo: tapar una cámara para forzar el rechazo y comprobar «INTENTO 1 DE 2», «2 DE 2» y que después sigue.
+
 # Informe de avance — App móvil v0.6.0 (formato maestro §23.2)
 
 **Tarea:** segmentos fijos por hilera (pedido de Oscar). **Fecha:** 2026-10-20 · **CFG-10** · esquema SQLite **5**

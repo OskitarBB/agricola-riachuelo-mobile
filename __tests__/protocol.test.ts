@@ -25,6 +25,27 @@ test('un CAPTURE_COMMAND válido ida y vuelta', () => {
   if (parsed.ok) expect(parsed.envelope.type).toBe('CAPTURE_COMMAND');
 });
 
+test('CAPTURE_COMMAND con lastAttempt (v0.6.1): opcional y booleano', () => {
+  const payload = {
+    purpose: 'SECUENCIA' as const,
+    sequenceId: 'e2b4d6f8-1a3c-4e5f-8a9b-0c1d2e3f4a5b',
+    sequenceNumber: 3,
+    captureId: 'a1f0c3e2-6b7d-4c1a-9f2e-0d3b5a7c9e11',
+    passId: '7c9e1a3b-5d7f-4a1b-8c2d-3e4f5a6b7c8d',
+    lateralCode: 'LATERAL_A' as const,
+    mode: 'MANUAL' as const,
+    issuedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 3000).toISOString(),
+    replacesCaptureId: 'b2f0c3e2-6b7d-4c1a-9f2e-0d3b5a7c9e11',
+  };
+  const ok = parseEnvelope(serializeEnvelope(createEnvelope('CAPTURE_COMMAND', SID, DID, { ...payload, lastAttempt: true })));
+  expect(ok.ok).toBe(true);
+  if (ok.ok) expect((ok.envelope.payload as { lastAttempt?: boolean }).lastAttempt).toBe(true);
+  const bad = JSON.parse(serializeEnvelope(createEnvelope('CAPTURE_COMMAND', SID, DID, payload)));
+  bad.payload.lastAttempt = 'sí';
+  expect(parseEnvelope(JSON.stringify(bad)).ok).toBe(false);
+});
+
 test('rechaza MIXTO, v distinto de 1, JSON roto y payload incompleto', () => {
   const env = createEnvelope('SESSION_CONTEXT', SID, DID, {
     passId: null,
